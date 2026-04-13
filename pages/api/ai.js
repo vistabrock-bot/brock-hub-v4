@@ -1,18 +1,15 @@
-Ai · JS
-Copy
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
- 
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return res.status(500).json({
       content: [{ type: 'text', text: 'AI is not configured yet. Add ANTHROPIC_API_KEY to your Netlify environment variables (Site settings → Environment variables).' }]
     })
   }
- 
+
   try {
     const { system, messages, model, max_tokens } = req.body
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -29,15 +26,15 @@ export default async function handler(req, res) {
         messages,
       }),
     })
- 
+
     const data = await response.json()
- 
+
     if (!response.ok) {
       return res.status(200).json({
         content: [{ type: 'text', text: `API error: ${data.error?.message || 'Unknown error'}` }]
       })
     }
- 
+
     return res.status(200).json(data)
   } catch (err) {
     return res.status(200).json({
@@ -45,4 +42,3 @@ export default async function handler(req, res) {
     })
   }
 }
- 
