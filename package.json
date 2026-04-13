@@ -1,0 +1,1 @@
+{\n  "name": "brock-family-hub",\n  "version": "2.0.0",\n  "private": true,\n  "scripts": {\n    "dev": "next dev",\n    "build": "next build",\n    "start": "next start"\n  },\n  "dependencies": {\n    "next": "14.2.3",\n    "react": "18.3.1",\n    "react-dom": "18.3.1"\n  },\n  "devDependencies": {\n    "@netlify/plugin-nextjs": "^4.41.3"\n  }\n}
