@@ -1,0 +1,116 @@
+# Brock Family Hub v2.0
+
+A private family organization app for the Brock family — calendar dashboard, summer camp planner, task manager, meal planning, AI assistant, and more.
+
+## Features
+
+- **Home Dashboard** — Live weather, today's events, family board, task list, meal plan, emergency contacts
+- **Summer Scenario Builder** — Drag-and-drop 11-week camp planner with per-kid budgets (auto-saved)
+- **Camp Directory** — 9 curated Austin camps with filters, costs, drive times, and age eligibility
+- **AI Assistant** — Powered by Claude, knows all camp data, costs, schedules. Responds in Russian for Tanya
+- **Meal Plan** — Simple weekly dinner planner
+- **Task Manager** — Family to-do list with assignments
+- **Bilingual** — English / Russian toggle
+- **Persistent State** — Schedule, tasks, notes, and meals auto-save to localStorage
+
+## Tech Stack
+
+- **Next.js 14** (Pages Router)
+- **React 18**
+- **Anthropic Claude API** (AI assistant)
+- **Open-Meteo** (weather)
+- **Netlify** (hosting via `@netlify/plugin-nextjs`)
+
+## Deploy to Netlify
+
+### Option A: GitHub → Netlify (Recommended)
+
+1. **Push to GitHub:**
+   ```bash
+   cd brock-family-hub
+   git init
+   git add .
+   git commit -m "Brock Family Hub v2.0"
+   git remote add origin https://github.com/YOUR_USERNAME/brock-family-hub.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+2. **Connect in Netlify:**
+   - Go to [app.netlify.com](https://app.netlify.com)
+   - Click **"Add new site"** → **"Import an existing project"**
+   - Select your GitHub repo
+   - Build settings should auto-detect from `netlify.toml`:
+     - Build command: `npm run build`
+     - Publish directory: `.next`
+   - Click **Deploy**
+
+3. **Add your API key:**
+   - In Netlify: **Site settings → Environment variables**
+   - Add: `ANTHROPIC_API_KEY` = your key
+   - Redeploy for changes to take effect
+
+### Option B: Netlify CLI
+
+```bash
+npm install -g netlify-cli
+cd brock-family-hub
+npm install
+netlify login
+netlify init
+netlify deploy --build --prod
+```
+
+Then add `ANTHROPIC_API_KEY` in Netlify dashboard under Environment variables.
+
+### Custom Domain
+
+Your current site is at `brockfamily.netlify.app`. To add a custom domain:
+- Netlify Dashboard → **Domain management** → **Add custom domain**
+- Point your domain's DNS to Netlify's nameservers
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes (for AI) | Claude API key from [console.anthropic.com](https://console.anthropic.com) |
+
+## Local Development
+
+```bash
+npm install
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+## Project Structure
+
+```
+brock-family-hub/
+├── netlify.toml          # Netlify build config + Next.js plugin
+├── next.config.js        # Next.js config with standalone output
+├── package.json
+├── .gitignore
+├── pages/
+│   ├── _app.js           # App wrapper
+│   ├── index.js          # Main app (all tabs)
+│   └── api/
+│       └── ai.js         # Claude API proxy
+├── styles/
+│   └── globals.css       # Reset + scrollbar styling
+└── public/               # Static assets (empty for now)
+```
+
+## What's New in v2.0
+
+- **Soft neutral color scheme** — Warm off-whites, sage greens, muted stones instead of dark mode
+- **Tasks** — Family to-do list with checkboxes and assignments
+- **Meal planning** — Weekly dinner planner with quick editing
+- **Emergency contacts** — Pediatrician, poison control, school, plumber
+- **Computed ages** — Auto-calculated from DOBs (no more hardcoded "Age 5")
+- **localStorage persistence** — Schedule, tasks, notes, meals survive page refresh
+- **Netlify-ready** — Proper `netlify.toml` with `@netlify/plugin-nextjs`
+- **Improved AI** — Better error handling, meal/task context in system prompt
+- **Modern typography** — DM Serif Display + Outfit font pairing
