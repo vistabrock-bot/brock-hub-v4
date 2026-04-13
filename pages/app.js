@@ -1,9 +1,3 @@
-[build]
-  command = "npm run build"
-  publish = ".next"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
-[build.environment]
-  NODE_VERSION = "18"
+export default function AppPage() {
+  return <div>App page</div>
+}
