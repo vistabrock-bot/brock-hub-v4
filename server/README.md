@@ -37,25 +37,10 @@ The Anthropic API key is **never** sent to the browser.
 
 ## Supabase Setup
 
-Run the following SQL once in the **Supabase SQL Editor** (Dashboard → SQL Editor):
+1. Open your Supabase project → **SQL Editor** → **New query**.
+2. Copy-paste the contents of [`migrations/001_create_invitations.sql`](migrations/001_create_invitations.sql) and click **Run**.
 
-```sql
-create table if not exists public.invitations (
-  id          uuid primary key default gen_random_uuid(),
-  token       text unique not null,
-  invited_by  uuid references auth.users(id) on delete set null,
-  email       text not null,
-  accepted    boolean not null default false,
-  created_at  timestamptz not null default now(),
-  accepted_at timestamptz
-);
-
--- Row-level security: owners can only see their own invitations
-alter table public.invitations enable row level security;
-
-create policy "owner select" on public.invitations
-  for select using (auth.uid() = invited_by);
-```
+That migration creates the `invitations` table and enables Row-Level Security so users can only see their own sent invitations. The server's service-role key bypasses RLS for inserts and updates.
 
 ---
 
@@ -195,21 +180,107 @@ backend is designed for a long-running process deployment.
 
 ## Connecting the Frontend
 
-The frontend (`pages/index.js`) can talk to this backend by pointing fetch calls at:
+### 1. Create the frontend environment file
 
-```
-http://localhost:4000   (local dev)
-https://your-api.onrender.com   (production)
-```
-
-Store the base URL in the frontend's `.env.local` as:
-
-```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+```bash
+# from the repo root
+cp .env.local.example .env.local
+# Edit .env.local — set NEXT_PUBLIC_API_BASE_URL to http://localhost:4000 for local dev
 ```
 
-Then replace calls to `/api/ai` with calls to `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/anthropic/messages`
-(adding the `Authorization: Bearer <token>` header).
+### 2. Use `NEXT_PUBLIC_API_BASE_URL` in fetch calls
+
+Any page or component that needs the backend should read the base URL from the
+environment variable (available at build time and runtime via Next.js):
+
+```js
+const API = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'
+```
+
+### 3. Auth flow (login / register)
+
+```js
+// Register
+const res = await fetch(`${API}/api/auth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password, fullName }),
+})
+
+// Login — store the returned accessToken in state / localStorage
+const { accessToken, user } = await fetch(`${API}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password }),
+}).then(r => r.json())
+```
+
+### 4. Replace the existing `/api/ai` calls with the server proxy
+
+The current `pages/api/ai.js` Next.js route proxies directly to Anthropic.
+Once the server is running, swap those calls to go through the server instead
+(which adds authentication and rate-limiting):
+
+```js
+// Before (pages/api/ai — no auth)
+const res = await fetch('/api/ai', { method: 'POST', ... })
+
+// After (Express server — requires Bearer token)
+const res = await fetch(`${API}/api/anthropic/messages`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+  },
+  body: JSON.stringify({ system, messages }),
+})
+```
+
+### 5. Planner AI
+
+```js
+const res = await fetch(`${API}/api/planner/summer`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+  },
+  body: JSON.stringify({
+    hoursOutPerDay: 6,
+    totalBudget: 3000,
+    maxCommuteMinutes: 25,
+    startDate: '2026-06-01',
+    endDate: '2026-08-14',
+    children: [
+      { name: 'Monroe',    ageYears: 5 },
+      { name: 'Genevieve', ageYears: 3 },
+    ],
+    camps: [/* your CAMPS array from pages/index.js */],
+  }),
+})
+const { plan } = await res.json()
+// `plan` is the AI-generated week-by-week text schedule
+```
+
+### 6. Invite a user (e.g. Tanya)
+
+```js
+const res = await fetch(`${API}/api/invite/send`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${accessToken}`,
+  },
+  body: JSON.stringify({ email: 'tanya@example.com' }),
+})
+const { inviteUrl } = await res.json()
+// Share inviteUrl with Tanya — it contains a unique sign-up token
+```
+
+### Production
+
+Set `NEXT_PUBLIC_API_BASE_URL` to your deployed server URL (Render, Railway, etc.)
+in your Netlify dashboard under **Site settings → Environment variables**.
 
 ---
 
