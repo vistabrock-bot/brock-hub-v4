@@ -427,6 +427,11 @@ export default function BrockFamilyHub() {
             <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.15rem', fontWeight:400, color:C.textSoft }}>
               {fmtTime(now)}
             </span>
+            <a href="/profile" style={{
+              padding:'5px 12px', borderRadius:8, border:`1px solid ${C.border}`,
+              fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', fontWeight:600,
+              color:C.textSoft, textDecoration:'none', background:C.bg, transition:'all 0.15s'
+            }}>👤 Profile</a>
           </div>
         </div>
 

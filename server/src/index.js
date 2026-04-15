@@ -14,6 +14,8 @@ const authRoutes = require('./routes/auth')
 const inviteRoutes = require('./routes/invite')
 const anthropicRoutes = require('./routes/anthropic')
 const plannerRoutes = require('./routes/planner')
+const gcalRoutes = require('./routes/gcal')
+const adminRoutes = require('./routes/admin')
 
 const app = express()
 
@@ -63,6 +65,8 @@ app.use('/api/auth', authRoutes)
 app.use('/api/invite', inviteRoutes)
 app.use('/api/anthropic', aiLimiter, anthropicRoutes)
 app.use('/api/planner', aiLimiter, plannerRoutes)
+app.use('/api/gcal', gcalRoutes)
+app.use('/api/admin', adminRoutes)
 
 // ─── Health check ────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
