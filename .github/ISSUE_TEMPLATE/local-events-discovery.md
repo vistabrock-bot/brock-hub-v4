@@ -1,9 +1,10 @@
 ---
 name: Feature — Local Events Discovery
-description: Discover and add Austin-area events from trusted sources
+about: 'What should we do this weekend? '
 title: "[Feature] Local events discovery (Austin)"
-labels: ["feature", "events", "p2"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Sources

@@ -1,9 +1,10 @@
 ---
 name: Feature — Jenya-First Experience
-description: UX optimized explicitly for Jenya’s needs
+about: 'Optimize wife experience '
 title: "[Feature] Jenya-first UX & mental load reduction"
-labels: ["feature", "ux", "p0", "critical"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Success Condition

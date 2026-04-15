@@ -1,9 +1,10 @@
 ---
 name: Feature — Sharing & Roles
-description: Controlled, flexible household sharing
+about: Admin Settings
 title: "[Feature] Role-based sharing & permissions"
-labels: ["feature", "sharing", "p2"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Roles

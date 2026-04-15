@@ -1,9 +1,10 @@
 ---
 name: Feature — Grocery List & Alexa Integration
-description: Voice and shared grocery workflows
+about: Grocery List & Alexa Integration
 title: "[Feature] Grocery list & Alexa integration"
-labels: ["feature", "integration", "p2"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Functional Requirements

@@ -1,9 +1,10 @@
 ---
 name: Feature — Collaborative Meal Planner
-description: Shared household meal planning
+about: Meal Planner
 title: "[Feature] Collaborative meal planner"
-labels: ["feature", "meals", "p1"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Problem Statement

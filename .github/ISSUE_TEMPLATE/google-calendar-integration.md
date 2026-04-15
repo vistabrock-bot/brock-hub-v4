@@ -1,9 +1,10 @@
 ---
 name: Feature — Google Calendar Integration
-description: Bi-directional Google Calendar support as the system of record
+about: gCal
 title: "[Feature] Google Calendar integration"
-labels: ["feature", "calendar", "p1"]
-assignees: []
+labels: ''
+assignees: ''
+
 ---
 
 ## Problem Statement
