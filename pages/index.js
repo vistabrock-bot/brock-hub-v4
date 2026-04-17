@@ -488,7 +488,17 @@ export default function BrockFamilyHub() {
     { date:'Jun 1',  label:'Summer camps begin', color:C.sage },
     { date:'Aug 14', label:'Summer camps end', color:C.sage },
     { date:'Aug 24', label:'Westminster resumes — Monroe starts K!', color:C.sky },
-    { date:'Nov 11', label:"Anastasia turns 1 🎂", color:C.rose },
+     {
+  date: "Nov 11",
+  label: `Anastasia turns ${(() => {
+    const dob = new Date(2025, 10, 11); // Nov 11, 2025
+    const now = new Date();
+    const thisYearBday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+    const nextBdayYear = now > thisYearBday ? now.getFullYear() + 1 : now.getFullYear();
+    return nextBdayYear - dob.getFullYear();
+  })()} 🎂`,
+  color: colors.rose
+}
   ]
 
   // ─── PLANNER HELPERS (weekend / next30 / summer / discover) ─────
