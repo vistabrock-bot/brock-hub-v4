@@ -159,6 +159,60 @@ const SCHOOLS = [
   { name:'Priscilla Pond Flawn Lab', short:'UT Lab School', address:'108 E Dean Keeton', driveMins:8, lastDay:'~May 16, 2026', firstDay:'Aug 2026', color:C.stone },
 ]
 
+// ─── CURATED AUSTIN FAMILY DISCOVER FEED ─────────────────────────
+// Categories: outdoor | kids | music | food | art | date
+// dayPref: 'sat' | 'sun' | 'any' (used by weekend suggestions)
+const DISCOVER_EVENTS = [
+  { id:'zilker-botanical', title:'Zilker Botanical Garden — Spring Bloom', emoji:'🌳', category:'outdoor',
+    venue:'Zilker Botanical Garden', address:'2220 Barton Springs Rd', dayPref:'sat',
+    timeLabel:'10am–4pm', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'thinkery-openmake', title:'Thinkery Family Studio — Open Make', emoji:'🎨', category:'kids',
+    venue:'Thinkery', address:'1830 Simond Ave', dayPref:'sat',
+    timeLabel:'11am–2pm', priceLabel:'$14', ages:'2+', tags:['Kids','Indoor'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#9B8FC4)' },
+  { id:'austin-symphony-family', title:'Austin Symphony — Family Concert', emoji:'🎶', category:'music',
+    venue:'Long Center', address:'701 W Riverside Dr', dayPref:'sat',
+    timeLabel:'11am', priceLabel:'$12 family', ages:'3+', tags:['Music','Kids'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'ladybird-loop', title:'Lady Bird Lake Loop — Family Bike Ride', emoji:'🚴', category:'outdoor',
+    venue:'Auditorium Shores', address:'800 W Riverside Dr', dayPref:'sun',
+    timeLabel:'Anytime', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'austin-zoo-toddler', title:'Austin Zoo — Toddler Sunday', emoji:'🦒', category:'kids',
+    venue:'Austin Zoo', address:'10808 Rawhide Trail', dayPref:'sun',
+    timeLabel:'9am–5pm', priceLabel:'$15/adult', ages:'Toddler+', tags:['Kids','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#C08B8B)' },
+  { id:'bouldin-brunch', title:'Pancake Breakfast — Bouldin Acres', emoji:'🥞', category:'food',
+    venue:'Bouldin Acres', address:'2027 S Lamar', dayPref:'sun',
+    timeLabel:'9am–12pm', priceLabel:'$$', ages:'All ages', tags:['Family','Brunch'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7BA3BE)' },
+  { id:'mckinney-falls', title:'McKinney Falls Family Hike', emoji:'🥾', category:'outdoor',
+    venue:'McKinney Falls State Park', address:'5808 McKinney Falls Pkwy', dayPref:'any',
+    timeLabel:'Open dawn–dusk', priceLabel:'$6/car', ages:'All ages', tags:['Outdoor','Hike'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#7BA3BE)' },
+  { id:'acl-live-datenight', title:'ACL Live — Date Night Show', emoji:'🎵', category:'date',
+    venue:'Moody Theater', address:'310 Willie Nelson Blvd', dayPref:'sat',
+    timeLabel:'8pm', priceLabel:'$45+', ages:'Adults', tags:['Date','Music'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'deep-eddy', title:'Deep Eddy Pool — Morning Swim', emoji:'🏊', category:'outdoor',
+    venue:'Deep Eddy Pool', address:'401 Deep Eddy Ave', dayPref:'sun',
+    timeLabel:'8am–8pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+  { id:'blantonkids', title:'Blanton Museum — Kids Gallery Hunt', emoji:'🖼️', category:'art',
+    venue:'Blanton Museum of Art', address:'200 E MLK Jr Blvd', dayPref:'any',
+    timeLabel:'10am–5pm', priceLabel:'Free Sun', ages:'3+', tags:['Art','Indoor'],
+    heroGrad:'linear-gradient(135deg,#9B8FC4,#7BA3BE)' },
+  { id:'mueller-farmers', title:'Mueller Farmers Market', emoji:'🥕', category:'food',
+    venue:'Branch Park Pavilion', address:'2300 Barbara Jordan Blvd', dayPref:'sun',
+    timeLabel:'10am–2pm', priceLabel:'Free entry', ages:'All ages', tags:['Food','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7C9A82)' },
+  { id:'barton-springs', title:'Barton Springs — Family Splash', emoji:'💦', category:'outdoor',
+    venue:'Barton Springs Pool', address:'2201 William Barton Dr', dayPref:'any',
+    timeLabel:'5am–10pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+]
+
 const WMO_EMOJI = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌦️',53:'🌦️',61:'🌧️',63:'🌧️',65:'⛈️',71:'❄️',80:'🌦️',95:'⛈️'}
 const WMO_LABEL = {0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',51:'Light drizzle',53:'Drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',71:'Snow',80:'Showers',95:'Thunderstorm'}
 const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -523,7 +577,17 @@ export default function BrockFamilyHub() {
     { date:'Jun 1',  label:'Summer camps begin', color:C.sage },
     { date:'Aug 14', label:'Summer camps end', color:C.sage },
     { date:'Aug 24', label:'Westminster resumes — Monroe starts K!', color:C.sky },
-    { date:'Nov 11', label:"Anastasia turns 1 🎂", color:C.rose },
+     {
+  date: "Nov 11",
+  label: `Anastasia turns ${(() => {
+    const dob = new Date(2025, 10, 11); // Nov 11, 2025
+    const now = new Date();
+    const thisYearBday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+    const nextBdayYear = now > thisYearBday ? now.getFullYear() + 1 : now.getFullYear();
+    return nextBdayYear - dob.getFullYear();
+  })()} 🎂`,
+  color: C.rose
+}
   ]
 
   // ─── WEEKEND DATE HELPERS ──────────────────────────────────────
