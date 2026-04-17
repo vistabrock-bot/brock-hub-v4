@@ -190,9 +190,38 @@ function saveLS(key, val) {
   try { localStorage.setItem(`bfh_${key}`, JSON.stringify(val)) } catch {}
 }
 
+// ─── GOOGLE CALENDAR HELPERS ─────────────────────────────────────
+function toGCalDate(dateStr, timeStr) {
+  // dateStr: 'YYYY-MM-DD', timeStr: 'HH:MM' (24h) or empty for all-day
+  if (!dateStr) return ''
+  if (!timeStr) {
+    const d = dateStr.replace(/-/g, '')
+    return `${d}/${d}`
+  }
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const [hour, minute] = timeStr.split(':').map(Number)
+  const pad = n => String(n).padStart(2,'0')
+  const fmtLocal = (y, mo, d, h, mi) => `${y}${pad(mo)}${pad(d)}T${pad(h)}${pad(mi)}00`
+  const start = fmtLocal(year, month, day, hour, minute)
+  const endMinute = minute + 60
+  const endHour = hour + Math.floor(endMinute / 60)
+  const end = fmtLocal(year, month, day, endHour % 24, endMinute % 60)
+  return `${start}/${end}`
+}
+
+function buildGCalUrl(event) {
+  const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+  const title = encodeURIComponent(event.title || 'Event')
+  const dates = encodeURIComponent(toGCalDate(event.date, event.time))
+  const details = encodeURIComponent(event.description || '')
+  const location = encodeURIComponent(event.location || '')
+  return `${base}&text=${title}&dates=${dates}&details=${details}&location=${location}`
+}
+
 // ─── MAIN COMPONENT ─────────────────────────────────────────────
 export default function BrockFamilyHub() {
   const [tab, setTab]           = useState('home')
+  const [plannerTab, setPlannerTab] = useState('scenario')
   const [lang, setLang]         = useState('en')
   const [now, setNow]           = useState(new Date())
   const [weather, setWeather]   = useState(null)
@@ -203,10 +232,19 @@ export default function BrockFamilyHub() {
   const [planKid, setPlanKid]   = useState('Monroe')
   const [campFilter, setCampFilter] = useState('All')
 
+  // Custom Camps (persisted)
+  const [customCamps, setCustomCamps] = useState([])
+  const [campForm, setCampForm] = useState(null) // null = closed, {} = new, {..} = editing
+
+  // Events (persisted)
+  const [events, setEvents]     = useState([])
+  const [eventForm, setEventForm] = useState(null) // null = closed, {} = new, {..} = editing
+
   // Tasks (persisted)
   const [tasks, setTasks]       = useState([])
   const [taskText, setTaskText] = useState('')
   const [taskAssign, setTaskAssign] = useState('Bakari')
+  const [taskFilter, setTaskFilter] = useState('all')
 
   // Meals (persisted)
   const [meals, setMeals]       = useState({})
@@ -231,6 +269,7 @@ export default function BrockFamilyHub() {
   // Hydrate from localStorage on mount
   useEffect(() => {
     setSchedule(loadLS('schedule', {}))
+    setPlannerTab(loadLS('plannerTab', 'scenario'))
     setTasks(loadLS('tasks', [
       { id:1, text:"Register Monroe for Kidventure Week 1", done:false, who:'Bakari', ts:Date.now()-86400000 },
       { id:2, text:"Schedule Anastasia's 6-month checkup", done:false, who:'Jenya', ts:Date.now()-43200000 },
@@ -249,14 +288,24 @@ export default function BrockFamilyHub() {
       Sat:'Grilled burgers',
       Sun:'Borscht (Tanya\'s recipe) 🇺🇦',
     }))
+    setEvents(loadLS('events', [
+      { id:1, title:"Monroe T-ball", date:'2026-05-16', time:'09:30', location:'2417 Vista LN field', description:"Don't forget Monroe's cleats! ⚾", color:C.monroe },
+      { id:2, title:"Westminster Last Day", date:'2026-05-22', time:'', location:'Westminster School', description:'Last day of school for Monroe', color:C.sky },
+      { id:3, title:"Summer Camps Begin", date:'2026-06-01', time:'', location:'', description:'First week of summer camps!', color:C.sage },
+      { id:4, title:"Anastasia 6-month Checkup", date:'2026-05-11', time:'10:00', location:'Austin Regional Clinic', description:'Schedule with pediatrician', color:C.rose },
+    ]))
+    setCustomCamps(loadLS('customCamps', []))
     setMounted(true)
   }, [])
 
   // Persist on change
   useEffect(() => { if(mounted) saveLS('schedule', schedule) }, [schedule, mounted])
+  useEffect(() => { if(mounted) saveLS('plannerTab', plannerTab) }, [plannerTab, mounted])
   useEffect(() => { if(mounted) saveLS('tasks', tasks) }, [tasks, mounted])
   useEffect(() => { if(mounted) saveLS('notes', notes) }, [notes, mounted])
   useEffect(() => { if(mounted) saveLS('meals', meals) }, [meals, mounted])
+  useEffect(() => { if(mounted) saveLS('events', events) }, [events, mounted])
+  useEffect(() => { if(mounted) saveLS('customCamps', customCamps) }, [customCamps, mounted])
 
   // Clock
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
@@ -305,14 +354,56 @@ export default function BrockFamilyHub() {
   useEffect(() => { chatRef.current?.scrollIntoView({ behavior:'smooth' }) }, [aiMsgs])
 
   // Schedule helpers
+  const allCamps = [...CAMPS, ...customCamps]
   const setWeekCamp = (kid, wk, cid) => {
     setSchedule(p => cid ? { ...p, [`${kid}-${wk}`]: cid } : Object.fromEntries(Object.entries(p).filter(([k])=>k!==`${kid}-${wk}`)))
   }
-  const getWeekCamp = (kid, wk) => { const cid = schedule[`${kid}-${wk}`]; return cid ? CAMPS.find(c => c.id === cid) : null }
-  const kidCost = kid => Object.entries(schedule).filter(([k])=>k.startsWith(`${kid}-`)).reduce((s,[,cid])=>s+(CAMPS.find(c=>c.id===cid)?.costWk||0),0)
+  const getWeekCamp = (kid, wk) => { const cid = schedule[`${kid}-${wk}`]; return cid ? allCamps.find(c => c.id === cid) : null }
+  const kidCost = kid => Object.entries(schedule).filter(([k])=>k.startsWith(`${kid}-`)).reduce((s,[,cid])=>s+(allCamps.find(c=>c.id===cid)?.costWk||0),0)
   const totalCost = kidCost('Monroe') + kidCost('Genevieve')
   const weeksPlanned = kid => Object.keys(schedule).filter(k=>k.startsWith(`${kid}-`)).length
-  const filteredCamps = campFilter === 'All' ? CAMPS : CAMPS.filter(c => c.tags.includes(campFilter) || c.type === campFilter)
+  const filteredCamps = campFilter === 'All' ? allCamps : allCamps.filter(c => c.tags.includes(campFilter) || c.type === campFilter)
+
+  // Custom camp CRUD helpers
+  const saveCamp = (form) => {
+    if (!form.name?.trim()) return
+    if (form.id) {
+      setCustomCamps(p => p.map(c => c.id === form.id ? { ...form } : c))
+    } else {
+      const newCamp = {
+        ...form,
+        id: `custom_${Date.now()}`,
+        costWk: Number(form.costWk) || 0,
+        ageMin: Number(form.ageMin) || 0,
+        ageMax: Number(form.ageMax) || 12,
+        driveMins: Number(form.driveMins) || 0,
+        weeks: [1,2,3,4,5,6,7,8,9,10,11],
+        kids: form.kids || ['Monroe','Genevieve'],
+        tags: form.tags || ['Custom'],
+        color: form.color || C.sage,
+        emoji: form.emoji || '🏕️',
+      }
+      setCustomCamps(p => [...p, newCamp])
+    }
+    setCampForm(null)
+  }
+  const deleteCamp = (id) => {
+    setCustomCamps(p => p.filter(c => c.id !== id))
+    setSchedule(p => Object.fromEntries(Object.entries(p).filter(([,cid]) => cid !== id)))
+  }
+
+  // Event CRUD helpers
+  const saveEvent = (form) => {
+    if (!form.title?.trim()) return
+    if (form.id) {
+      setEvents(p => p.map(e => e.id === form.id ? { ...form } : e))
+    } else {
+      setEvents(p => [...p, { ...form, id: Date.now() }])
+    }
+    setEventForm(null)
+  }
+  const deleteEvent = (id) => setEvents(p => p.filter(e => e.id !== id))
+  const sortedEvents = [...events].sort((a,b) => (a.date||'').localeCompare(b.date||''))
 
   // Task helpers
   const addTask = () => {
@@ -322,6 +413,7 @@ export default function BrockFamilyHub() {
   }
   const toggleTask = id => setTasks(p => p.map(t => t.id === id ? { ...t, done:!t.done } : t))
   const removeTask = id => setTasks(p => p.filter(t => t.id !== id))
+  const filteredTasks = taskFilter === 'all' ? tasks : taskFilter === 'done' ? tasks.filter(t=>t.done) : tasks.filter(t=>!t.done)
 
   // Meal helpers
   const setMeal = () => {
@@ -408,7 +500,7 @@ export default function BrockFamilyHub() {
           </div>
 
           <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'center' }}>
-            {[['home','🏠 Home'],['planner','📅 Planner'],['camps','🏕️ Camps'],['assistant','🤖 Assistant']].map(([id,lbl]) => (
+            {[['home','🏠 Home'],['planner','📅 Planner'],['assistant','🤖 Assistant'],['todo','✅ To-Do']].map(([id,lbl]) => (
               <button key={id} style={s.tabBtn(tab===id)} onClick={()=>setTab(id)}>{lbl}</button>
             ))}
           </div>
@@ -706,200 +798,469 @@ export default function BrockFamilyHub() {
 
           {/* ── PLANNER TAB ─────────────────────────────────── */}
           {tab === 'planner' && (
-            <div>
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18 }}>
-                <div>
-                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
-                    Summer <span style={{ color:C.sage }}>Scenario Builder</span>
-                  </div>
-                  <div style={{ fontSize:'0.65rem', color:C.muted, marginTop:3 }}>
-                    Jun 1 – Aug 14, 2026 · 11 weeks · Assign camps week by week · Changes auto-save
-                  </div>
-                </div>
-                <div style={{ display:'flex', gap:10 }}>
-                  {['Monroe','Genevieve'].map(k => {
-                    const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                    return (
-                      <div key={k} style={{ ...s.card({ textAlign:'center', minWidth:110 }) }}>
-                        <div style={{ fontSize:'0.55rem', letterSpacing:'0.1em', textTransform:'uppercase', color:m?.color, marginBottom:3, fontWeight:700 }}>{k}</div>
-                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:C.sage }}>${kidCost(k).toLocaleString()}</div>
-                        <div style={{ fontSize:'0.56rem', color:C.muted }}>{weeksPlanned(k)}/11 weeks</div>
-                      </div>
-                    )
-                  })}
-                  <div style={{ ...s.card({ textAlign:'center', minWidth:100, borderColor:C.sage+'44', background:C.sageBg }) }}>
-                    <div style={{ fontSize:'0.55rem', letterSpacing:'0.1em', textTransform:'uppercase', color:C.sage, marginBottom:3, fontWeight:700 }}>Total</div>
-                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:C.sage }}>${totalCost.toLocaleString()}</div>
-                    <div style={{ fontSize:'0.56rem', color:C.muted }}>summer budget</div>
-                  </div>
-                </div>
-              </div>
+            <div style={{ display:'grid', gridTemplateColumns:'200px 1fr', gap:16, alignItems:'start' }}>
 
-              {/* Kid selector */}
-              <div style={{ display:'flex', gap:6, marginBottom:16 }}>
-                {['Monroe','Genevieve'].map(k => {
-                  const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                  return <button key={k} style={s.pill(planKid===k, m?.color)} onClick={()=>setPlanKid(k)}>{m?.emoji} {k}</button>
-                })}
-                <span style={{ fontSize:'0.62rem', color:C.muted, alignSelf:'center', marginLeft:8 }}>
-                  Click a week to assign or change a camp
-                </span>
-              </div>
-
-              {/* Week grid */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(210px,1fr))', gap:10, marginBottom:20 }}>
-                {SUMMER_WEEKS.map(week => {
-                  const assigned = getWeekCamp(planKid, week.wk)
-                  const eligible = CAMPS.filter(c => c.kids.includes(planKid) && c.weeks.includes(week.wk))
-                  const isJul4 = week.wk === 5
-                  return (
-                    <div key={week.wk} style={{
-                      ...s.card({
-                        minHeight:130,
-                        borderColor:assigned?assigned.color+'55':C.border,
-                        background:assigned?assigned.color+'08':C.card,
-                        position:'relative'
-                      })
-                    }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                        <div>
-                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:assigned?assigned.color:C.muted }}>W{week.wk}</div>
-                          <div style={{ fontSize:'0.56rem', color:C.muted }}>{week.start}–{week.end}</div>
-                        </div>
-                        {isJul4 && <span style={{ fontSize:'0.56rem', color:C.stone }}>🎆 Jul 4</span>}
-                      </div>
-                      {assigned ? (
-                        <div>
-                          <div style={{ fontSize:'0.75rem', fontWeight:700, color:assigned.color, lineHeight:1.2, marginBottom:4 }}>{assigned.emoji} {assigned.name}</div>
-                          <div style={{ fontSize:'0.6rem', color:C.muted }}>${assigned.costWk}/wk · {assigned.driveMins} min</div>
-                          <button onClick={()=>setWeekCamp(planKid,week.wk,null)} style={{
-                            position:'absolute', top:8, right:8, background:C.bg, border:`1px solid ${C.border}`,
-                            color:C.muted, borderRadius:6, padding:'2px 7px', fontSize:'0.58rem', cursor:'pointer'
-                          }}>✕</button>
-                        </div>
-                      ) : (
-                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                          {eligible.slice(0,3).map(c => (
-                            <button key={c.id} onClick={()=>setWeekCamp(planKid,week.wk,c.id)} style={{
-                              padding:'4px 8px', borderRadius:7, border:`1px solid ${c.color}33`,
-                              background:c.color+'0a', color:c.color, fontFamily:"'Outfit',sans-serif",
-                              fontSize:'0.6rem', fontWeight:600, cursor:'pointer', textAlign:'left',
-                              transition:'all 0.12s'
-                            }}>
-                              {c.emoji} {c.name.split(' ').slice(0,2).join(' ')} — ${c.costWk}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Summary */}
-              {Object.keys(schedule).length > 0 && (
-                <div style={{ ...s.card({ borderColor:C.sage+'33' }), marginBottom:16 }}>
-                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.15rem', marginBottom:12 }}>Schedule Summary</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-                    {['Monroe','Genevieve'].map(k => {
-                      const entries = Object.entries(schedule).filter(([key])=>key.startsWith(`${k}-`))
-                      const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                      return (
-                        <div key={k}>
-                          <div style={{ fontSize:'0.58rem', letterSpacing:'0.12em', textTransform:'uppercase', color:m?.color, marginBottom:8, fontWeight:700 }}>{k}</div>
-                          {entries.length===0 ? <div style={{ fontSize:'0.72rem', color:C.muted }}>No camps assigned yet</div> : entries.map(([key,cid]) => {
-                            const wk = parseInt(key.split('-')[1])
-                            const camp = CAMPS.find(c=>c.id===cid)
-                            const week = SUMMER_WEEKS.find(w=>w.wk===wk)
-                            return (
-                              <div key={key} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.68rem', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
-                                <span style={{ color:C.muted }}>{week?.start}–{week?.end}</span>
-                                <span>{camp?.emoji} {camp?.name.split(' ').slice(0,2).join(' ')}</span>
-                                <span style={{ color:C.sage, fontWeight:600 }}>${camp?.costWk}</span>
-                              </div>
-                            )
-                          })}
-                          <div style={{ marginTop:6, fontSize:'0.72rem', fontWeight:700, color:C.sage }}>Total: ${kidCost(k).toLocaleString()}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <button onClick={()=>{setAiInput('Review my current schedule and optimize it.');setTab('assistant')}} style={{
-                    ...s.btn(), marginTop:14, letterSpacing:'0.06em',
-                  }}>🤖 Optimize with AI →</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── CAMPS TAB ─────────────────────────────────── */}
-          {tab === 'camps' && (
-            <div>
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
-                <div>
-                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
-                    Austin Summer <span style={{ color:C.sage }}>Camps 2026</span>
-                  </div>
-                  <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
-                    Sources: KidsOutAndAbout · Austin Chronicle · Do512 Family · AustinFunForKids
-                  </div>
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:C.sage }}>{CAMPS.length}</span>
-                  <span style={{ fontSize:'0.62rem', color:C.muted }}>camps curated</span>
-                </div>
-              </div>
-
-              {/* Filters */}
-              <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:16 }}>
-                {['All','Sports','Gymnastics','Dance','STEAM','Art','Swim','Outdoor'].map(f => (
-                  <button key={f} style={s.pill(campFilter===f)} onClick={()=>setCampFilter(f)}>{f}</button>
+              {/* Sidebar nav */}
+              <div style={{ ...s.card({ padding:'10px 8px' }), position:'sticky', top:80 }}>
+                <div style={{ fontSize:'0.52rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 10px' }}>Planner</div>
+                {[
+                  ['scenario','🗓️','Summer Scenario Builder'],
+                  ['camps','🏕️','Camps'],
+                  ['events','📆','Events'],
+                ].map(([id,icon,label]) => (
+                  <button key={id} onClick={()=>setPlannerTab(id)} style={{
+                    display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
+                    borderRadius:9, border:'none', cursor:'pointer', textAlign:'left',
+                    fontFamily:"'Outfit',sans-serif", fontSize:'0.72rem', fontWeight:plannerTab===id?700:500,
+                    background:plannerTab===id?C.sage+'18':'transparent',
+                    color:plannerTab===id?C.sage:C.textSoft,
+                    borderLeft:`3px solid ${plannerTab===id?C.sage:'transparent'}`,
+                    transition:'all 0.15s',
+                  }}>
+                    <span style={{ fontSize:'0.9rem' }}>{icon}</span>{label}
+                  </button>
                 ))}
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px,1fr))', gap:12 }}>
-                {filteredCamps.map(camp => (
-                  <div key={camp.id} style={{
-                    ...s.card({ borderLeft:`3px solid ${camp.color}`, display:'flex', flexDirection:'column' })
-                  }}>
-                    <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:8 }}>
-                      <span style={{ fontSize:'1.4rem', lineHeight:1 }}>{camp.emoji}</span>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, fontSize:'0.85rem', lineHeight:1.2 }}>{camp.name}</div>
-                        <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:1 }}>{camp.type}</div>
+              {/* Submodule content */}
+              <div>
+
+                {/* ── SCENARIO BUILDER ── */}
+                {plannerTab === 'scenario' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Summer <span style={{ color:C.sage }}>Scenario Builder</span>
+                        </div>
+                        <div style={{ fontSize:'0.65rem', color:C.muted, marginTop:3 }}>
+                          Jun 1 – Aug 14, 2026 · 11 weeks · Assign camps week by week · Changes auto-save
+                        </div>
                       </div>
-                      <div style={{ textAlign:'right' }}>
-                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.05rem', color:C.sage }}>${camp.costWk}</div>
-                        <div style={{ fontSize:'0.52rem', color:C.muted }}>/week</div>
+                      <div style={{ display:'flex', gap:10 }}>
+                        {['Monroe','Genevieve'].map(k => {
+                          const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                          return (
+                            <div key={k} style={{ ...s.card({ textAlign:'center', minWidth:110 }) }}>
+                              <div style={{ fontSize:'0.55rem', letterSpacing:'0.1em', textTransform:'uppercase', color:m?.color, marginBottom:3, fontWeight:700 }}>{k}</div>
+                              <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:C.sage }}>${kidCost(k).toLocaleString()}</div>
+                              <div style={{ fontSize:'0.56rem', color:C.muted }}>{weeksPlanned(k)}/11 weeks</div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ ...s.card({ textAlign:'center', minWidth:100, borderColor:C.sage+'44', background:C.sageBg }) }}>
+                          <div style={{ fontSize:'0.55rem', letterSpacing:'0.1em', textTransform:'uppercase', color:C.sage, marginBottom:3, fontWeight:700 }}>Total</div>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:C.sage }}>${totalCost.toLocaleString()}</div>
+                          <div style={{ fontSize:'0.56rem', color:C.muted }}>summer budget</div>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ fontSize:'0.72rem', lineHeight:1.55, color:C.textSoft, marginBottom:8 }}>{camp.desc}</div>
-
-                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
-                      <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:camp.color+'12', color:camp.color, fontWeight:700 }}>Ages {camp.ageMin}–{camp.ageMax}</span>
-                      <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:C.bg, color:C.muted }}>🚗 {camp.driveMins} min</span>
-                      {camp.kids.map(k => {
+                    {/* Kid selector */}
+                    <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+                      {['Monroe','Genevieve'].map(k => {
                         const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                        return <span key={k} style={{ fontSize:'0.54rem', padding:'2px 7px', borderRadius:8, background:m?.color+'12', color:m?.color, fontWeight:600 }}>{k}</span>
+                        return <button key={k} style={s.pill(planKid===k, m?.color)} onClick={()=>setPlanKid(k)}>{m?.emoji} {k}</button>
+                      })}
+                      <span style={{ fontSize:'0.62rem', color:C.muted, alignSelf:'center', marginLeft:8 }}>
+                        Click a week to assign or change a camp
+                      </span>
+                    </div>
+
+                    {/* Week grid */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(210px,1fr))', gap:10, marginBottom:20 }}>
+                      {SUMMER_WEEKS.map(week => {
+                        const assigned = getWeekCamp(planKid, week.wk)
+                        const eligible = allCamps.filter(c => (c.kids||[]).includes(planKid) && (c.weeks||[]).includes(week.wk))
+                        const isJul4 = week.wk === 5
+                        return (
+                          <div key={week.wk} style={{
+                            ...s.card({
+                              minHeight:130,
+                              borderColor:assigned?assigned.color+'55':C.border,
+                              background:assigned?assigned.color+'08':C.card,
+                              position:'relative'
+                            })
+                          }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                              <div>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:assigned?assigned.color:C.muted }}>W{week.wk}</div>
+                                <div style={{ fontSize:'0.56rem', color:C.muted }}>{week.start}–{week.end}</div>
+                              </div>
+                              {isJul4 && <span style={{ fontSize:'0.56rem', color:C.stone }}>🎆 Jul 4</span>}
+                            </div>
+                            {assigned ? (
+                              <div>
+                                <div style={{ fontSize:'0.75rem', fontWeight:700, color:assigned.color, lineHeight:1.2, marginBottom:4 }}>{assigned.emoji} {assigned.name}</div>
+                                <div style={{ fontSize:'0.6rem', color:C.muted }}>${assigned.costWk}/wk · {assigned.driveMins} min</div>
+                                <button onClick={()=>setWeekCamp(planKid,week.wk,null)} style={{
+                                  position:'absolute', top:8, right:8, background:C.bg, border:`1px solid ${C.border}`,
+                                  color:C.muted, borderRadius:6, padding:'2px 7px', fontSize:'0.58rem', cursor:'pointer'
+                                }}>✕</button>
+                              </div>
+                            ) : (
+                              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                                {eligible.slice(0,3).map(c => (
+                                  <button key={c.id} onClick={()=>setWeekCamp(planKid,week.wk,c.id)} style={{
+                                    padding:'4px 8px', borderRadius:7, border:`1px solid ${c.color}33`,
+                                    background:c.color+'0a', color:c.color, fontFamily:"'Outfit',sans-serif",
+                                    fontSize:'0.6rem', fontWeight:600, cursor:'pointer', textAlign:'left',
+                                    transition:'all 0.12s'
+                                  }}>
+                                    {c.emoji} {c.name.split(' ').slice(0,2).join(' ')} — ${c.costWk}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
                       })}
                     </div>
 
-                    <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:10 }}>📍 {camp.location}</div>
+                    {/* Summary */}
+                    {Object.keys(schedule).length > 0 && (
+                      <div style={{ ...s.card({ borderColor:C.sage+'33' }), marginBottom:16 }}>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.15rem', marginBottom:12 }}>Schedule Summary</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+                          {['Monroe','Genevieve'].map(k => {
+                            const entries = Object.entries(schedule).filter(([key])=>key.startsWith(`${k}-`))
+                            const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                            return (
+                              <div key={k}>
+                                <div style={{ fontSize:'0.58rem', letterSpacing:'0.12em', textTransform:'uppercase', color:m?.color, marginBottom:8, fontWeight:700 }}>{k}</div>
+                                {entries.length===0 ? <div style={{ fontSize:'0.72rem', color:C.muted }}>No camps assigned yet</div> : entries.map(([key,cid]) => {
+                                  const wk = parseInt(key.split('-')[1])
+                                  const camp = allCamps.find(c=>c.id===cid)
+                                  const week = SUMMER_WEEKS.find(w=>w.wk===wk)
+                                  return (
+                                    <div key={key} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.68rem', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
+                                      <span style={{ color:C.muted }}>{week?.start}–{week?.end}</span>
+                                      <span>{camp?.emoji} {camp?.name.split(' ').slice(0,2).join(' ')}</span>
+                                      <span style={{ color:C.sage, fontWeight:600 }}>${camp?.costWk}</span>
+                                    </div>
+                                  )
+                                })}
+                                <div style={{ marginTop:6, fontSize:'0.72rem', fontWeight:700, color:C.sage }}>Total: ${kidCost(k).toLocaleString()}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <button onClick={()=>{setAiInput('Review my current schedule and optimize it.');setTab('assistant')}} style={{
+                          ...s.btn(), marginTop:14, letterSpacing:'0.06em',
+                        }}>🤖 Optimize with AI →</button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                    <div style={{ marginTop:'auto', display:'flex', gap:6 }}>
-                      {camp.kids.map(k => (
-                        <button key={k} onClick={()=>{setPlanKid(k);setTab('planner')}} style={{
-                          flex:1, padding:'7px 8px', borderRadius:8,
-                          border:`1px solid ${FAMILY_MEMBERS.find(m=>m.name===k)?.color+'33'}`,
-                          background:FAMILY_MEMBERS.find(m=>m.name===k)?.color+'08',
-                          color:FAMILY_MEMBERS.find(m=>m.name===k)?.color,
-                          fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', fontWeight:700, cursor:'pointer'
-                        }}>+ {k}'s Plan</button>
+                {/* ── CAMPS SUBMODULE ── */}
+                {plannerTab === 'camps' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Austin Summer <span style={{ color:C.sage }}>Camps 2026</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Sources: KidsOutAndAbout · Austin Chronicle · Do512 Family · AustinFunForKids
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:C.sage }}>{allCamps.length}</span>
+                          <span style={{ fontSize:'0.62rem', color:C.muted }}>camps curated</span>
+                        </div>
+                        <button onClick={()=>setCampForm({ name:'', type:'', emoji:'🏕️', ageMin:3, ageMax:12, costWk:'', driveMins:'', location:'', desc:'', color:C.sage, kids:['Monroe','Genevieve'], tags:['Custom'] })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Camp</button>
+                      </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:16 }}>
+                      {['All','Sports','Gymnastics','Dance','STEAM','Art','Swim','Outdoor','Custom'].map(f => (
+                        <button key={f} style={s.pill(campFilter===f)} onClick={()=>setCampFilter(f)}>{f}</button>
                       ))}
                     </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px,1fr))', gap:12 }}>
+                      {filteredCamps.map(camp => (
+                        <div key={camp.id} style={{
+                          ...s.card({ borderLeft:`3px solid ${camp.color}`, display:'flex', flexDirection:'column' })
+                        }}>
+                          <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:8 }}>
+                            <span style={{ fontSize:'1.4rem', lineHeight:1 }}>{camp.emoji}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:700, fontSize:'0.85rem', lineHeight:1.2 }}>{camp.name}</div>
+                              <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:1 }}>{camp.type}</div>
+                            </div>
+                            <div style={{ textAlign:'right' }}>
+                              <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.05rem', color:C.sage }}>${camp.costWk}</div>
+                              <div style={{ fontSize:'0.52rem', color:C.muted }}>/week</div>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize:'0.72rem', lineHeight:1.55, color:C.textSoft, marginBottom:8 }}>{camp.desc}</div>
+
+                          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:camp.color+'12', color:camp.color, fontWeight:700 }}>Ages {camp.ageMin}–{camp.ageMax}</span>
+                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:C.bg, color:C.muted }}>🚗 {camp.driveMins} min</span>
+                            {(camp.kids||[]).map(k => {
+                              const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                              return <span key={k} style={{ fontSize:'0.54rem', padding:'2px 7px', borderRadius:8, background:m?.color+'12', color:m?.color, fontWeight:600 }}>{k}</span>
+                            })}
+                          </div>
+
+                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:10 }}>📍 {camp.location}</div>
+
+                          <div style={{ marginTop:'auto', display:'flex', gap:6 }}>
+                            {(camp.kids||[]).map(k => (
+                              <button key={k} onClick={()=>{setPlanKid(k);setPlannerTab('scenario')}} style={{
+                                flex:1, padding:'7px 8px', borderRadius:8,
+                                border:`1px solid ${FAMILY_MEMBERS.find(m=>m.name===k)?.color+'33'}`,
+                                background:FAMILY_MEMBERS.find(m=>m.name===k)?.color+'08',
+                                color:FAMILY_MEMBERS.find(m=>m.name===k)?.color,
+                                fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', fontWeight:700, cursor:'pointer'
+                              }}>+ {k}'s Plan</button>
+                            ))}
+                            {camp.id.toString().startsWith('custom_') && (
+                              <>
+                                <button onClick={()=>setCampForm({...camp})} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                                <button onClick={()=>deleteCamp(camp.id)} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add/Edit Camp Modal */}
+                    {campForm && (
+                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <div style={{ ...s.card({ maxWidth:480, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
+                            {campForm.id ? 'Edit Camp' : 'Add New Camp'}
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            {[['name','Camp Name','text'],['emoji','Emoji','text'],['type','Type (e.g. Sports)','text'],['location','Location','text'],['desc','Description','text']].map(([field,label,type]) => (
+                              <div key={field}>
+                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
+                                <input value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
+                              </div>
+                            ))}
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                              {[['costWk','$/week'],['driveMins','Drive min'],['ageMin','Age min'],['ageMax','Age max']].map(([field,label]) => (
+                                <div key={field}>
+                                  <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
+                                  <input type="number" value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
+                                </div>
+                              ))}
+                            </div>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Kids</div>
+                              <div style={{ display:'flex', gap:6 }}>
+                                {['Monroe','Genevieve','Anastasia'].map(k => {
+                                  const sel = (campForm.kids||[]).includes(k)
+                                  const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                                  return (
+                                    <button key={k} onClick={()=>setCampForm(p=>({...p,kids:sel?p.kids.filter(x=>x!==k):[...(p.kids||[]),k]}))} style={s.pill(sel, m?.color)}>{k}</button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                            <button onClick={()=>saveCamp(campForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
+                            <button onClick={()=>setCampForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                )}
+
+                {/* ── EVENTS SUBMODULE ── */}
+                {plannerTab === 'events' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Family <span style={{ color:C.sage }}>Events</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Manage family events · Add to Google Calendar · CRUD supported
+                        </div>
+                      </div>
+                      <button onClick={()=>setEventForm({ title:'', date:'', time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Event</button>
+                    </div>
+
+                    {sortedEvents.length === 0 && (
+                      <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                        <div style={{ fontSize:'2rem', marginBottom:8 }}>📆</div>
+                        <div style={{ fontSize:'0.8rem' }}>No events yet. Add your first family event!</div>
+                      </div>
+                    )}
+
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {sortedEvents.map(ev => (
+                        <div key={ev.id} style={{ ...s.card({ borderLeft:`4px solid ${ev.color||C.sage}`, display:'flex', alignItems:'flex-start', gap:14 }) }}>
+                          <div style={{ minWidth:54, textAlign:'center' }}>
+                            {ev.date ? (
+                              <>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.5rem', lineHeight:1, color:ev.color||C.sage }}>{new Date(ev.date+'T12:00:00').getDate()}</div>
+                                <div style={{ fontSize:'0.55rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>
+                                  {MONTH_FULL[new Date(ev.date+'T12:00:00').getMonth()]?.slice(0,3)}
+                                </div>
+                              </>
+                            ) : <div style={{ fontSize:'0.65rem', color:C.muted }}>TBD</div>}
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700, fontSize:'0.9rem', marginBottom:3 }}>{ev.title}</div>
+                            <div style={{ display:'flex', gap:12, fontSize:'0.65rem', color:C.muted, flexWrap:'wrap', marginBottom:ev.description?6:0 }}>
+                              {ev.time && <span>🕐 {ev.time}</span>}
+                              {ev.location && <span>📍 {ev.location}</span>}
+                            </div>
+                            {ev.description && <div style={{ fontSize:'0.72rem', color:C.textSoft, lineHeight:1.5 }}>{ev.description}</div>}
+                          </div>
+                          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                            <a href={buildGCalUrl(ev)} target="_blank" rel="noopener noreferrer" style={{
+                              padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
+                              background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
+                              textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
+                            }}>📅 gCal</a>
+                            <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                            <button onClick={()=>deleteEvent(ev.id)} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add/Edit Event Modal */}
+                    {eventForm && (
+                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <div style={{ ...s.card({ maxWidth:460, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
+                            {eventForm.id ? 'Edit Event' : 'New Event'}
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Event Title *</div>
+                              <input value={eventForm.title||''} onChange={e=>setEventForm(p=>({...p,title:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Monroe T-ball" />
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                              <div>
+                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Date</div>
+                                <input type="date" value={eventForm.date||''} onChange={e=>setEventForm(p=>({...p,date:e.target.value}))} style={{ ...s.input }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Time (optional)</div>
+                                <input type="time" value={eventForm.time||''} onChange={e=>setEventForm(p=>({...p,time:e.target.value}))} style={{ ...s.input }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Location</div>
+                              <input value={eventForm.location||''} onChange={e=>setEventForm(p=>({...p,location:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Zilker Park" />
+                            </div>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Notes / Description</div>
+                              <input value={eventForm.description||''} onChange={e=>setEventForm(p=>({...p,description:e.target.value}))} style={{ ...s.input }} placeholder="Any details…" />
+                            </div>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Color</div>
+                              <div style={{ display:'flex', gap:8 }}>
+                                {[C.sage,C.sky,C.stone,C.rose,C.lavender].map(col => (
+                                  <button key={col} onClick={()=>setEventForm(p=>({...p,color:col}))} style={{
+                                    width:24, height:24, borderRadius:'50%', background:col, border:eventForm.color===col?`2px solid ${C.text}`:'2px solid transparent', cursor:'pointer'
+                                  }} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                            <button onClick={()=>saveEvent(eventForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
+                            {eventForm.id && (
+                              <a href={buildGCalUrl(eventForm)} target="_blank" rel="noopener noreferrer" style={{
+                                flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.sage}44`,
+                                background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
+                                fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
+                                display:'flex', alignItems:'center', justifyContent:'center', gap:4
+                              }}>📅 Add to gCal</a>
+                            )}
+                            <button onClick={()=>setEventForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* ── TO-DO TAB ──────────────────────────────────────── */}
+          {tab === 'todo' && (
+            <div style={{ maxWidth:800, margin:'0 auto' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
+                <div>
+                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                    Family <span style={{ color:C.sage }}>To-Do</span>
+                  </div>
+                  <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                    {tasks.filter(t=>!t.done).length} open · {tasks.filter(t=>t.done).length} completed
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:4 }}>
+                  {[['all','All'],['open','Open'],['done','Done']].map(([f,lbl]) => (
+                    <button key={f} style={s.pill(taskFilter===f)} onClick={()=>setTaskFilter(f)}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add task */}
+              <div style={{ ...s.card({ marginBottom:16 }) }}>
+                <div style={{ display:'flex', gap:8 }}>
+                  <input value={taskText} onChange={e=>setTaskText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask()}
+                    placeholder={ru?'Добавить задачу…':'Add a task…'}
+                    style={{ ...s.input, flex:1 }} />
+                  <select value={taskAssign} onChange={e=>setTaskAssign(e.target.value)} style={{ ...s.input, width:'auto', cursor:'pointer' }}>
+                    {FAMILY_MEMBERS.filter(m=>['Bakari','Jenya'].includes(m.name)).map(m => (
+                      <option key={m.id} value={m.name}>{m.emoji} {m.name}</option>
+                    ))}
+                  </select>
+                  <button onClick={addTask} style={{ ...s.btn(), padding:'9px 16px' }}>+ Add</button>
+                </div>
+              </div>
+
+              {/* Task list */}
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {filteredTasks.length === 0 && (
+                  <div style={{ ...s.card({ textAlign:'center', padding:'32px', color:C.muted }) }}>
+                    <div style={{ fontSize:'1.5rem', marginBottom:6 }}>✅</div>
+                    <div style={{ fontSize:'0.8rem' }}>{taskFilter==='done'?'No completed tasks yet':'All done! Nothing here.'}</div>
+                  </div>
+                )}
+                {filteredTasks.map(t => {
+                  const m = FAMILY_MEMBERS.find(fm=>fm.name===t.who)
+                  return (
+                    <div key={t.id} style={{ ...s.card({ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', opacity:t.done?0.6:1 }) }}>
+                      <button onClick={()=>toggleTask(t.id)} style={{
+                        width:20, height:20, borderRadius:'50%', border:`2px solid ${t.done?C.sage:C.border}`,
+                        background:t.done?C.sage:'transparent', cursor:'pointer', flexShrink:0,
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        color:'#fff', fontSize:'0.6rem',
+                      }}>{t.done?'✓':''}</button>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:'0.8rem', fontWeight:500, textDecoration:t.done?'line-through':'none', color:t.done?C.muted:C.text }}>{t.text}</div>
+                        <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:2 }}>
+                          <span style={{ color:m?.color, fontWeight:600 }}>{t.who}</span>
+                          {' · '}{new Date(t.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                        </div>
+                      </div>
+                      <button onClick={()=>removeTask(t.id)} style={{
+                        background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:'0.85rem', padding:'2px 4px'
+                      }}>✕</button>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
