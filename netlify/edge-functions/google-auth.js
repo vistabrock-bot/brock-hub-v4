@@ -79,7 +79,7 @@ export default async function handler(req) {
   const CLIENT_ID = Netlify.env.get('GOOGLE_CLIENT_ID')
   const CLIENT_SECRET = Netlify.env.get('GOOGLE_CLIENT_SECRET')
   const REDIRECT_URI = Netlify.env.get('GOOGLE_REDIRECT_URI')
-  const SESSION_SECRET = Netlify.env.get('SESSION_SECRET') || 'changeme-set-SESSION_SECRET'
+  const SESSION_SECRET = Netlify.env.get('SESSION_SECRET')
 
   const corsHeaders = {
     'access-control-allow-origin': req.headers.get('origin') || '*',
@@ -96,6 +96,14 @@ export default async function handler(req) {
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return new Response(
       JSON.stringify({ error: 'Google Calendar integration is not configured.' }),
+      { status: 503, headers: { 'content-type': 'application/json', ...corsHeaders } }
+    )
+  }
+
+  // SESSION_SECRET is required for all endpoints that read or write the session cookie
+  if (!SESSION_SECRET && !path.endsWith('/start')) {
+    return new Response(
+      JSON.stringify({ error: 'SESSION_SECRET environment variable is not configured.' }),
       { status: 503, headers: { 'content-type': 'application/json', ...corsHeaders } }
     )
   }

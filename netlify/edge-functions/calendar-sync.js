@@ -54,9 +54,11 @@ async function getSessionFromCookie(req, secret) {
  * Returns the access token string, or null if the session is missing/invalid.
  */
 async function getAccessToken(req) {
-  const SESSION_SECRET = Netlify.env.get('SESSION_SECRET') || 'changeme-set-SESSION_SECRET'
+  const SESSION_SECRET = Netlify.env.get('SESSION_SECRET')
   const CLIENT_ID = Netlify.env.get('GOOGLE_CLIENT_ID')
   const CLIENT_SECRET = Netlify.env.get('GOOGLE_CLIENT_SECRET')
+
+  if (!SESSION_SECRET || !CLIENT_ID || !CLIENT_SECRET) return null
 
   const sessionStr = await getSessionFromCookie(req, SESSION_SECRET)
   if (!sessionStr) return null
@@ -201,13 +203,14 @@ export default async function handler(req) {
   }
 
   // Pass through the upstream response
+  // For 204 No Content (e.g. DELETE), return an empty body rather than null
+  if (upstream.status === 204) {
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
   const text = await upstream.text()
-  return new Response(text || null, {
+  return new Response(text, {
     status: upstream.status,
-    headers: {
-      'content-type': text ? 'application/json' : 'text/plain',
-      ...corsHeaders,
-    },
+    headers: { 'content-type': 'application/json', ...corsHeaders },
   })
 }
 

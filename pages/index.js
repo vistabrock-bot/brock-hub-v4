@@ -1192,11 +1192,15 @@ export default function BrockFamilyHub() {
                           </div>
                           <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                             {(() => {
-                              const gcalUrl = ev.gcalEventId
-                                ? `https://calendar.google.com/calendar/event?eid=${btoa(ev.gcalEventId + ' ' + (ev.gcalCalendarId || '')).replace(/=/g,'')}`
+                              // When synced, link directly to the event; otherwise use template URL
+                              const eid = ev.gcalEventId
+                                ? btoa([ev.gcalEventId, ev.gcalCalendarId].filter(Boolean).join(' '))
+                                : null
+                              const gcalUrl = eid
+                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
                                 : buildGCalUrl(ev)
                               return (
-                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title={ev.gcalEventId ? 'Open in Google Calendar' : 'Add to Google Calendar'} style={{
+                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title={eid ? 'Open in Google Calendar' : 'Add to Google Calendar'} style={{
                                   padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
                                   background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
                                   textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
@@ -1257,8 +1261,11 @@ export default function BrockFamilyHub() {
                           <div style={{ display:'flex', gap:8, marginTop:18 }}>
                             <button onClick={()=>saveEvent(eventForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
                             {eventForm.id && (() => {
-                              const gcalUrl = eventForm.gcalEventId
-                                ? `https://calendar.google.com/calendar/event?eid=${btoa(eventForm.gcalEventId + ' ' + (eventForm.gcalCalendarId || '')).replace(/=/g,'')}`
+                              const eid = eventForm.gcalEventId
+                                ? btoa([eventForm.gcalEventId, eventForm.gcalCalendarId].filter(Boolean).join(' '))
+                                : null
+                              const gcalUrl = eid
+                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
                                 : buildGCalUrl(eventForm)
                               return (
                                 <a href={gcalUrl} target="_blank" rel="noopener noreferrer" style={{
@@ -1266,7 +1273,7 @@ export default function BrockFamilyHub() {
                                   background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
                                   fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
                                   display:'flex', alignItems:'center', justifyContent:'center', gap:4
-                                }}>📅 {eventForm.gcalEventId ? 'Open in gCal' : 'Add to gCal'}</a>
+                                }}>📅 {eid ? 'Open in gCal' : 'Add to gCal'}</a>
                               )
                             })()}
                             <button onClick={()=>setEventForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>

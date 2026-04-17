@@ -125,6 +125,9 @@ export function useGoogleCalendar(events, setEvents) {
   const [lastSynced, setLastSynced] = useState(() => lsGet('bfh:lastSync'))
   const [syncError, setSyncError] = useState(null)
   const [toast, setToast] = useState(null)
+  // Collect toast messages queued inside setEvents callbacks and display them
+  // via useEffect to avoid triggering state updates during a render cycle.
+  const [pendingToasts, setPendingToasts] = useState([])
 
   const syncingRef = useRef(false)
   const eventsRef = useRef(events)
@@ -137,6 +140,13 @@ export function useGoogleCalendar(events, setEvents) {
     setToast({ message, id })
     setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 4000)
   }, [])
+
+  // Drain pending toasts queued from inside setEvents callbacks
+  useEffect(() => {
+    if (pendingToasts.length === 0) return
+    setPendingToasts([])
+    pendingToasts.forEach((msg) => showToast(msg))
+  }, [pendingToasts, showToast])
 
   // ── Connection check ─────────────────────────────────────────────────────
 
@@ -190,6 +200,7 @@ export function useGoogleCalendar(events, setEvents) {
     try { payload = await res.json() } catch { return }
 
     const { items = [], nextSyncToken } = payload
+    const toastsToQueue = []
 
     setEvents((prev) => {
       let updated = [...prev]
@@ -222,8 +233,7 @@ export function useGoogleCalendar(events, setEvents) {
               id: local.id, // keep local id
               color: local.color, // keep user's color choice
             }
-            // Show toast outside of setEvents (after state is updated)
-            setTimeout(() => showToast(`"${gEvent.summary || 'Event'}" was updated elsewhere`), 0)
+            toastsToQueue.push(`"${gEvent.summary || 'Event'}" was updated elsewhere`)
           }
         }
       }
@@ -231,10 +241,16 @@ export function useGoogleCalendar(events, setEvents) {
       return updated
     })
 
+    // Queue toast notifications — displayed via the pendingToasts useEffect
+    // so they fire after the state update is committed rather than inside it.
+    if (toastsToQueue.length > 0) {
+      setPendingToasts((prev) => [...prev, ...toastsToQueue])
+    }
+
     if (nextSyncToken) {
       lsSet(`bfh:syncToken:${calendarId}`, nextSyncToken)
     }
-  }, [setEvents, showToast])
+  }, [setEvents]) // showToast is intentionally omitted — toasts are queued via pendingToasts
 
   // ── Full sync (all mapped calendars) ─────────────────────────────────────
 
@@ -340,7 +356,16 @@ export function useGoogleCalendar(events, setEvents) {
    */
   const upsertEvent = useCallback(async (ev) => {
     const mapping = getMapping()
-    const calendarId = ev.gcalCalendarId || mapping[ev.color] || mapping.family || null
+    // Resolve the target calendar: prefer the event's known calendar, then any
+    // mapped calendar from the sync settings.  Using the first available mapped
+    // calendar avoids the need to duplicate the per-person color constants inside
+    // this hook.  A future enhancement could add an explicit `person` field on
+    // events to make the per-person routing more precise.
+    const calendarId = ev.gcalCalendarId
+      || mapping[ev.person]
+      || mapping.family
+      || Object.values(mapping).find(Boolean)
+      || null
     if (!calendarId || !connected) {
       // Mark as local-only if no mapping
       setEvents((prev) =>
