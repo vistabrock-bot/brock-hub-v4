@@ -57,6 +57,25 @@ function getAge(dob) {
   return `${age}y`
 }
 
+// Compute the coming weekend (Sat/Sun) relative to `today`.
+// Mon–Fri → next Sat/Sun  |  Sat → this Sat + Sun  |  Sun → prev Sat + this Sun
+function computeWeekendDates(today = new Date()) {
+  const dow = today.getDay() // 0=Sun, 6=Sat
+  const clone = (d) => new Date(d.getTime())
+  let sat, sun
+  if (dow === 0) {
+    sat = clone(today); sat.setDate(today.getDate() - 1)
+    sun = clone(today)
+  } else if (dow === 6) {
+    sat = clone(today)
+    sun = clone(today); sun.setDate(today.getDate() + 1)
+  } else {
+    sat = clone(today); sat.setDate(today.getDate() + (6 - dow))
+    sun = clone(sat); sun.setDate(sat.getDate() + 1)
+  }
+  return { sat, sun }
+}
+
 const EMERGENCY = [
   { label:'Pediatrician', name:'Austin Regional Clinic', phone:'(512) 555-0100', icon:'🩺' },
   { label:'Poison Control', name:'TX Poison Center', phone:'1-800-222-1222', icon:'☎️' },
@@ -330,12 +349,7 @@ export default function BrockFamilyHub() {
 
   // Weekend forecast weather
   useEffect(() => {
-    const today = new Date()
-    const dow = today.getDay()
-    let sat, sun
-    if (dow === 0) { sat = new Date(today); sat.setDate(today.getDate()-1); sun = new Date(today) }
-    else if (dow === 6) { sat = new Date(today); sun = new Date(today); sun.setDate(today.getDate()+1) }
-    else { sat = new Date(today); sat.setDate(today.getDate()+(6-dow)); sun = new Date(sat); sun.setDate(sat.getDate()+1) }
+    const { sat, sun } = computeWeekendDates()
     const pad = n => String(n).padStart(2,'0')
     const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
     const satStr = fmt(sat), sunStr = fmt(sun)
@@ -513,19 +527,7 @@ export default function BrockFamilyHub() {
   ]
 
   // ─── WEEKEND DATE HELPERS ──────────────────────────────────────
-  const getWeekendDates = (today = new Date()) => {
-    const dow = today.getDay() // 0=Sun, 6=Sat
-    let sat, sun
-    if (dow === 0) {
-      sat = new Date(today); sat.setDate(today.getDate()-1); sun = new Date(today)
-    } else if (dow === 6) {
-      sat = new Date(today); sun = new Date(today); sun.setDate(today.getDate()+1)
-    } else {
-      sat = new Date(today); sat.setDate(today.getDate()+(6-dow))
-      sun = new Date(sat); sun.setDate(sat.getDate()+1)
-    }
-    return { sat, sun }
-  }
+  const getWeekendDates = (today = new Date()) => computeWeekendDates(today)
   const { sat: weekendSat, sun: weekendSun } = getWeekendDates(now)
   const padDate = n => String(n).padStart(2,'0')
   const fmtDateKey = d => `${d.getFullYear()}-${padDate(d.getMonth()+1)}-${padDate(d.getDate())}`
@@ -1434,7 +1436,7 @@ export default function BrockFamilyHub() {
 
                           <div style={{ marginTop:'auto', display:'flex', gap:6 }}>
                             {(camp.kids||[]).map(k => (
-                              <button key={k} onClick={()=>{setPlanKid(k);setPlannerTab('scenario')}} style={{
+                              <button key={k} onClick={()=>{ setPlanKid(k); setPlannerTab('scenario') }} style={{
                                 flex:1, padding:'7px 8px', borderRadius:8,
                                 border:`1px solid ${FAMILY_MEMBERS.find(m=>m.name===k)?.color+'33'}`,
                                 background:FAMILY_MEMBERS.find(m=>m.name===k)?.color+'08',
