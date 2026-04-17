@@ -1,7 +1,7 @@
 # Brock Hub — Server
 
 Node.js/Express backend for the Brock Family Hub app.
-Provides user authentication (via Supabase), an invitation system, and a secure proxy to the Anthropic AI API.
+Provides user authentication (via Supabase), an invitation system, Google Calendar OAuth integration, admin user management, and a secure proxy to the Anthropic AI API.
 
 ---
 
@@ -20,10 +20,137 @@ Provides user authentication (via Supabase), an invitation system, and a secure 
 | `GET  /api/invite/list` | List all invitations sent by the logged-in user |
 | `POST /api/anthropic/messages` | Secure Anthropic Messages API proxy |
 | `POST /api/planner/summer` | AI-powered summer camp planner |
+| `GET  /api/gcal/auth` | Initiate Google Calendar OAuth flow — returns `{ authUrl }` |
+| `GET  /api/gcal/callback` | OAuth callback — stores tokens, redirects to frontend |
+| `GET  /api/gcal/status` | Return Google Calendar connection status for current user |
+| `DELETE /api/gcal/disconnect` | Revoke and delete the current user's Google Calendar tokens |
+| `GET  /api/admin/users` | (Admin) List all users with search/filter and gcal status |
+| `POST /api/admin/users` | (Admin) Create a new user |
+| `PATCH /api/admin/users/:id` | (Admin) Update a user's name, email, or role |
+| `DELETE /api/admin/users/:id/gcal` | (Admin) Disconnect a user's Google Calendar |
 | `GET  /health` | Health-check endpoint |
 
-All `/api/anthropic/*` and `/api/planner/*` routes require authentication.
-The Anthropic API key is **never** sent to the browser.
+All `/api/auth/*`, `/api/gcal/*`, `/api/anthropic/*`, and `/api/planner/*` routes require authentication.  
+All `/api/admin/*` routes additionally require admin role (`app_metadata.role === 'admin'` or listed in `ADMIN_EMAILS`).
+
+---
+
+## Prerequisites
+
+- **Node.js ≥ 18**
+- A [Supabase](https://supabase.com) project (free tier is fine)
+- An [Anthropic](https://console.anthropic.com) API key
+- A [Google Cloud Console](https://console.cloud.google.com) project with Calendar API enabled (for gcal features)
+
+---
+
+## Supabase Setup
+
+1. Open your Supabase project → **SQL Editor** → **New query**.
+2. Run [`migrations/001_create_invitations.sql`](migrations/001_create_invitations.sql) to create the invitations table.
+3. Run [`migrations/002_gcal_and_roles.sql`](migrations/002_gcal_and_roles.sql) to create the `google_calendar_tokens` table.
+
+---
+
+## Google Calendar Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+2. Create an **OAuth 2.0 Client ID** of type **Web application**.
+3. Add an **Authorized redirect URI**:
+   - Development: `http://localhost:4000/api/gcal/callback`
+   - Production: `https://your-api.onrender.com/api/gcal/callback`
+4. Enable the **Google Calendar API** in **APIs & Services → Library**.
+5. Copy the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into your `.env` file.
+
+---
+
+## Admin Setup
+
+Admins are identified in two ways:
+
+1. **`ADMIN_EMAILS`** env var — a comma-separated list of email addresses that always have admin access.
+2. **`app_metadata.role`** — set `"admin"` on a user via the Supabase dashboard (Auth → Users → edit user → app_metadata).
+
+---
+
+## Local Development
+
+### 1. Install dependencies
+
+```bash
+cd server
+npm install
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env
+# Edit .env with your real credentials
+```
+
+### 3. Start the development server
+
+```bash
+npm run dev   # uses nodemon for auto-reload
+# or
+npm start
+```
+
+### 4. Run tests
+
+```bash
+npm test
+```
+
+The API will be available at `http://localhost:4000`.
+
+---
+
+## API Quick Reference
+
+### Connect Google Calendar (user flow)
+
+```js
+// 1. Get the auth URL (requires Bearer token)
+const { authUrl } = await fetch(`${API}/api/gcal/auth`, {
+  headers: { Authorization: `Bearer ${accessToken}` }
+}).then(r => r.json())
+
+// 2. Redirect the user's browser to authUrl
+window.location.href = authUrl
+
+// 3. Google redirects to GOOGLE_REDIRECT_URI (the Express server)
+//    The server stores the tokens and redirects to:
+//    ${APP_BASE_URL}/profile?gcal=connected
+```
+
+### Check gcal status
+
+```js
+const { connected, connectedAt } = await fetch(`${API}/api/gcal/status`, {
+  headers: { Authorization: `Bearer ${accessToken}` }
+}).then(r => r.json())
+```
+
+### Admin: list users
+
+```js
+const { users } = await fetch(`${API}/api/admin/users?search=alice&status=connected`, {
+  headers: { Authorization: `Bearer ${adminAccessToken}` }
+}).then(r => r.json())
+```
+
+---
+
+## Security Notes
+
+- `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_STATE_SECRET` are **server-only** secrets. Never commit them to source control.
+- Google Calendar tokens are stored in Supabase with Row-Level Security — only the owning user can read their own row via the anon client.
+- The OAuth `state` parameter is HMAC-signed to prevent CSRF attacks. It expires after 10 minutes.
+- Admin routes return 403 for non-admin users; 401 for unauthenticated requests.
+- Rate limiting: 100 req/15 min globally; stricter on AI endpoints (20 req/min).
+- CORS is restricted to the origins listed in `ALLOWED_ORIGINS`.
 
 ---
 

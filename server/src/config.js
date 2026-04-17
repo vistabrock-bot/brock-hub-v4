@@ -37,4 +37,23 @@ module.exports = {
 
   // Base URL for invitation links sent via email
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:3000',
+
+  // Google OAuth 2.0 for Calendar integration
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    // Redirect URI registered in Google Cloud Console
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/gcal/callback',
+    // Scopes needed for Google Calendar read/write
+    scopes: [
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+    ],
+    // Secret used to sign/verify the OAuth state parameter (CSRF protection)
+    stateSecret: process.env.GOOGLE_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'changeme',
+  },
+
+  // Admin — comma-separated list of admin user IDs or email addresses
+  // At least one must be set to use admin features.
+  adminEmails: (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
 }
