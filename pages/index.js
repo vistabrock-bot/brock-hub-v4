@@ -140,6 +140,60 @@ const SCHOOLS = [
   { name:'Priscilla Pond Flawn Lab', short:'UT Lab School', address:'108 E Dean Keeton', driveMins:8, lastDay:'~May 16, 2026', firstDay:'Aug 2026', color:C.stone },
 ]
 
+// ─── CURATED AUSTIN FAMILY DISCOVER FEED ─────────────────────────
+// Categories: outdoor | kids | music | food | art | date
+// dayPref: 'sat' | 'sun' | 'any' (used by weekend suggestions)
+const DISCOVER_EVENTS = [
+  { id:'zilker-botanical', title:'Zilker Botanical Garden — Spring Bloom', emoji:'🌳', category:'outdoor',
+    venue:'Zilker Botanical Garden', address:'2220 Barton Springs Rd', dayPref:'sat',
+    timeLabel:'10am–4pm', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'thinkery-openmake', title:'Thinkery Family Studio — Open Make', emoji:'🎨', category:'kids',
+    venue:'Thinkery', address:'1830 Simond Ave', dayPref:'sat',
+    timeLabel:'11am–2pm', priceLabel:'$14', ages:'2+', tags:['Kids','Indoor'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#9B8FC4)' },
+  { id:'austin-symphony-family', title:'Austin Symphony — Family Concert', emoji:'🎶', category:'music',
+    venue:'Long Center', address:'701 W Riverside Dr', dayPref:'sat',
+    timeLabel:'11am', priceLabel:'$12 family', ages:'3+', tags:['Music','Kids'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'ladybird-loop', title:'Lady Bird Lake Loop — Family Bike Ride', emoji:'🚴', category:'outdoor',
+    venue:'Auditorium Shores', address:'800 W Riverside Dr', dayPref:'sun',
+    timeLabel:'Anytime', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'austin-zoo-toddler', title:'Austin Zoo — Toddler Sunday', emoji:'🦒', category:'kids',
+    venue:'Austin Zoo', address:'10808 Rawhide Trail', dayPref:'sun',
+    timeLabel:'9am–5pm', priceLabel:'$15/adult', ages:'Toddler+', tags:['Kids','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#C08B8B)' },
+  { id:'bouldin-brunch', title:'Pancake Breakfast — Bouldin Acres', emoji:'🥞', category:'food',
+    venue:'Bouldin Acres', address:'2027 S Lamar', dayPref:'sun',
+    timeLabel:'9am–12pm', priceLabel:'$$', ages:'All ages', tags:['Family','Brunch'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7BA3BE)' },
+  { id:'mckinney-falls', title:'McKinney Falls Family Hike', emoji:'🥾', category:'outdoor',
+    venue:'McKinney Falls State Park', address:'5808 McKinney Falls Pkwy', dayPref:'any',
+    timeLabel:'Open dawn–dusk', priceLabel:'$6/car', ages:'All ages', tags:['Outdoor','Hike'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#7BA3BE)' },
+  { id:'acl-live-datenight', title:'ACL Live — Date Night Show', emoji:'🎵', category:'date',
+    venue:'Moody Theater', address:'310 Willie Nelson Blvd', dayPref:'sat',
+    timeLabel:'8pm', priceLabel:'$45+', ages:'Adults', tags:['Date','Music'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'deep-eddy', title:'Deep Eddy Pool — Morning Swim', emoji:'🏊', category:'outdoor',
+    venue:'Deep Eddy Pool', address:'401 Deep Eddy Ave', dayPref:'sun',
+    timeLabel:'8am–8pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+  { id:'blantonkids', title:'Blanton Museum — Kids Gallery Hunt', emoji:'🖼️', category:'art',
+    venue:'Blanton Museum of Art', address:'200 E MLK Jr Blvd', dayPref:'any',
+    timeLabel:'10am–5pm', priceLabel:'Free Sun', ages:'3+', tags:['Art','Indoor'],
+    heroGrad:'linear-gradient(135deg,#9B8FC4,#7BA3BE)' },
+  { id:'mueller-farmers', title:'Mueller Farmers Market', emoji:'🥕', category:'food',
+    venue:'Branch Park Pavilion', address:'2300 Barbara Jordan Blvd', dayPref:'sun',
+    timeLabel:'10am–2pm', priceLabel:'Free entry', ages:'All ages', tags:['Food','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7C9A82)' },
+  { id:'barton-springs', title:'Barton Springs — Family Splash', emoji:'💦', category:'outdoor',
+    venue:'Barton Springs Pool', address:'2201 William Barton Dr', dayPref:'any',
+    timeLabel:'5am–10pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+]
+
 const WMO_EMOJI = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌦️',53:'🌦️',61:'🌧️',63:'🌧️',65:'⛈️',71:'❄️',80:'🌦️',95:'⛈️'}
 const WMO_LABEL = {0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',51:'Light drizzle',53:'Drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',71:'Snow',80:'Showers',95:'Thunderstorm'}
 const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -221,7 +275,8 @@ function buildGCalUrl(event) {
 // ─── MAIN COMPONENT ─────────────────────────────────────────────
 export default function BrockFamilyHub() {
   const [tab, setTab]           = useState('home')
-  const [plannerTab, setPlannerTab] = useState('scenario')
+  const [plannerTab, setPlannerTab] = useState('weekend')
+  const [discoverFilter, setDiscoverFilter] = useState('This Weekend')
   const [lang, setLang]         = useState('en')
   const [now, setNow]           = useState(new Date())
   const [weather, setWeather]   = useState(null)
@@ -269,7 +324,7 @@ export default function BrockFamilyHub() {
   // Hydrate from localStorage on mount
   useEffect(() => {
     setSchedule(loadLS('schedule', {}))
-    setPlannerTab(loadLS('plannerTab', 'scenario'))
+    setPlannerTab(loadLS('plannerTab', 'weekend'))
     setTasks(loadLS('tasks', [
       { id:1, text:"Register Monroe for Kidventure Week 1", done:false, who:'Bakari', ts:Date.now()-86400000 },
       { id:2, text:"Schedule Anastasia's 6-month checkup", done:false, who:'Jenya', ts:Date.now()-43200000 },
@@ -435,6 +490,73 @@ export default function BrockFamilyHub() {
     { date:'Aug 24', label:'Westminster resumes — Monroe starts K!', color:C.sky },
     { date:'Nov 11', label:"Anastasia turns 1 🎂", color:C.rose },
   ]
+
+  // ─── PLANNER HELPERS (weekend / next30 / summer / discover) ─────
+  const isoDate = d => {
+    const pad = n => String(n).padStart(2,'0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+  }
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x }
+
+  // Get the upcoming Saturday and Sunday (today if today IS sat/sun)
+  const getWeekendDates = () => {
+    const today = new Date(now)
+    today.setHours(0,0,0,0)
+    const dow = today.getDay() // 0 Sun .. 6 Sat
+    const daysToSat = dow === 6 ? 0 : (6 - dow + 7) % 7
+    const sat = addDays(today, daysToSat)
+    const sun = addDays(sat, 1)
+    return { sat, sun, satIso: isoDate(sat), sunIso: isoDate(sun) }
+  }
+  const weekend = getWeekendDates()
+
+  const plannedForDate = (iso) => events.filter(e => e.date === iso)
+                                         .sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99'))
+  const suggestionsForDay = (which) => DISCOVER_EVENTS.filter(s => s.dayPref === which || s.dayPref === 'any').slice(0, 3)
+  const weekendPlannedCount = plannedForDate(weekend.satIso).length + plannedForDate(weekend.sunIso).length
+
+  // Next 30 days grouped
+  const eventsNext30 = [...events]
+    .filter(e => {
+      if (!e.date) return false
+      const d = new Date(e.date+'T12:00:00')
+      const diff = (d - now) / (1000*60*60*24)
+      return diff >= -0.5 && diff <= 30
+    })
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''))
+
+  // Summer coverage gaps
+  const weekHasCoverage = (kid, wk) => !!schedule[`${kid}-${wk}`]
+  const kidGaps = (kid) => SUMMER_WEEKS.filter(w => !weekHasCoverage(kid, w.wk)).length
+  const totalGaps = kidGaps('Monroe') + kidGaps('Genevieve')
+  const SUMMER_BUDGET = 8500
+
+  // Convert a suggestion → event (one-tap add)
+  const addSuggestionToPlanner = (sug, iso, dayLabel) => {
+    const colorMap = { outdoor:C.sage, kids:C.rose, music:C.lavender, food:C.stone, art:C.lavender, date:C.rose }
+    const newEv = {
+      id: Date.now() + Math.floor(Math.random()*1000),
+      title: `${sug.emoji} ${sug.title}`,
+      date: iso,
+      time: '',
+      location: `${sug.venue} · ${sug.address}`,
+      description: `${sug.timeLabel} · ${sug.priceLabel}${dayLabel ? ' · added from Discover' : ''}`,
+      color: colorMap[sug.category] || C.sage,
+    }
+    setEvents(p => [...p, newEv])
+  }
+
+  // Filter Discover feed
+  const filterDiscover = () => {
+    if (discoverFilter === 'This Weekend') return DISCOVER_EVENTS.filter(s => s.dayPref !== undefined)
+    if (discoverFilter === 'Free') return DISCOVER_EVENTS.filter(s => /free/i.test(s.priceLabel))
+    if (discoverFilter === 'Outdoor') return DISCOVER_EVENTS.filter(s => s.category === 'outdoor')
+    if (discoverFilter === 'Kids 3–6') return DISCOVER_EVENTS.filter(s => s.category === 'kids' || s.tags.includes('Kids'))
+    if (discoverFilter === 'Music') return DISCOVER_EVENTS.filter(s => s.category === 'music')
+    if (discoverFilter === 'Food') return DISCOVER_EVENTS.filter(s => s.category === 'food')
+    if (discoverFilter === 'Date Night') return DISCOVER_EVENTS.filter(s => s.category === 'date')
+    return DISCOVER_EVENTS
+  }
 
   // ─── STYLES ────────────────────────────────────────────────────
   const s = {
@@ -807,11 +929,33 @@ export default function BrockFamilyHub() {
 
               {/* Sidebar nav */}
               <div style={{ ...s.card({ padding:'10px 8px' }), position:'sticky', top:80 }}>
-                <div style={{ fontSize:'0.52rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 10px' }}>Planner</div>
+                <div style={{ fontSize:'0.52rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 10px' }}>Plan Horizon</div>
                 {[
-                  ['scenario','🗓️','Summer Scenario Builder'],
-                  ['camps','🏕️','Camps'],
-                  ['events','📆','Events'],
+                  ['weekend','🌤️','This Weekend', null],
+                  ['next30','📅','Next 30 Days', null],
+                  ['summer','☀️','Summer 2026', totalGaps > 0 ? `${totalGaps} gaps` : null],
+                  ['discover','🎟️','Discover Austin', null],
+                ].map(([id,icon,label,badge]) => (
+                  <button key={id} onClick={()=>setPlannerTab(id)} style={{
+                    display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
+                    borderRadius:9, border:'none', cursor:'pointer', textAlign:'left',
+                    fontFamily:"'Outfit',sans-serif", fontSize:'0.72rem', fontWeight:plannerTab===id?700:500,
+                    background:plannerTab===id?C.sage+'18':'transparent',
+                    color:plannerTab===id?C.sage:C.textSoft,
+                    borderLeft:`3px solid ${plannerTab===id?C.sage:'transparent'}`,
+                    transition:'all 0.15s',
+                  }}>
+                    <span style={{ fontSize:'0.9rem' }}>{icon}</span>
+                    <span style={{ flex:1 }}>{label}</span>
+                    {badge && <span style={{ fontSize:'0.52rem', fontWeight:700, background:C.rose, color:'#fff', padding:'2px 7px', borderRadius:10, letterSpacing:'0.04em' }}>{badge}</span>}
+                  </button>
+                ))}
+                <div style={{ height:8 }} />
+                <div style={{ fontSize:'0.52rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 10px' }}>Manage</div>
+                {[
+                  ['events','🗂','All Events'],
+                  ['camps','🏕','Camps Library'],
+                  ['scenario','🧠','Scenario Builder'],
                 ].map(([id,icon,label]) => (
                   <button key={id} onClick={()=>setPlannerTab(id)} style={{
                     display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
@@ -829,6 +973,312 @@ export default function BrockFamilyHub() {
 
               {/* Submodule content */}
               <div>
+
+                {/* ═══ THIS WEEKEND ══════════════════════════════════ */}
+                {plannerTab === 'weekend' && (
+                  <div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:14, alignItems:'start' }}>
+
+                      {/* Main col */}
+                      <div>
+                        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:14 }}>
+                          <div>
+                            <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.9rem', lineHeight:1 }}>
+                              This <span style={{ color:C.sage }}>Weekend</span>
+                            </div>
+                            <div style={{ fontSize:'0.7rem', color:C.muted, marginTop:6 }}>
+                              {MONTH_FULL[weekend.sat.getMonth()].slice(0,3)} {weekend.sat.getDate()}–{weekend.sun.getDate()} · {weekendPlannedCount} event{weekendPlannedCount===1?'':'s'} planned · {suggestionsForDay('sat').length + suggestionsForDay('sun').length} ideas waiting
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:8 }}>
+                            <button onClick={()=>setPlannerTab('discover')} style={{ padding:'8px 14px', borderRadius:10, border:`1px solid ${C.border}`, background:C.card, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', fontWeight:700, cursor:'pointer', letterSpacing:'0.04em' }}>📋 Browse Discover</button>
+                            <button onClick={()=>setEventForm({ title:'', date:weekend.satIso, time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.7rem', padding:'8px 14px', letterSpacing:'0.04em' }}>+ Add Event</button>
+                          </div>
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                          {[
+                            { label:'Saturday', date:weekend.sat, iso:weekend.satIso, pref:'sat', wx:`${wEmoji} ${weather?.temp??'—'}°` },
+                            { label:'Sunday', date:weekend.sun, iso:weekend.sunIso, pref:'sun', wx:`${wEmoji} ${weather?.temp??'—'}°` },
+                          ].map(day => {
+                            const planned = plannedForDate(day.iso)
+                            const suggestions = suggestionsForDay(day.pref)
+                            return (
+                              <div key={day.label} style={{ background:C.card, borderRadius:14, border:`1px solid ${C.border}`, boxShadow:C.shadow, overflow:'hidden' }}>
+                                <div style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', background:`linear-gradient(135deg,${C.card},${C.warmBg})` }}>
+                                  <div>
+                                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.4rem', lineHeight:1 }}>{day.label}</div>
+                                    <div style={{ fontSize:'0.58rem', letterSpacing:'0.14em', textTransform:'uppercase', color:C.muted, marginTop:3 }}>{MONTH_FULL[day.date.getMonth()]} {day.date.getDate()}</div>
+                                  </div>
+                                  <div style={{ display:'flex', alignItems:'center', gap:6, background:C.bg, padding:'5px 10px', borderRadius:20, fontSize:'0.7rem', fontWeight:600, color:C.textSoft }}>{day.wx}</div>
+                                </div>
+                                <div style={{ padding:'12px 18px 16px' }}>
+                                  <div style={{ ...s.sectionLabel, margin:'8px 0 8px', fontSize:'0.55rem' }}>Planned<div style={s.labelLine}/></div>
+                                  {planned.length === 0 ? (
+                                    <div style={{ padding:'18px 12px', textAlign:'center', color:C.dim, fontSize:'0.75rem', fontStyle:'italic', background:C.warmBg, borderRadius:10, marginBottom:6 }}>
+                                      Nothing planned yet — pick from below ↓
+                                    </div>
+                                  ) : planned.map(ev => (
+                                    <div key={ev.id} style={{ display:'flex', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, borderLeft:`3px solid ${ev.color||C.sage}`, background:`${ev.color||C.sage}08` }}>
+                                      <div style={{ minWidth:48 }}>
+                                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'0.95rem', lineHeight:1 }}>{ev.time ? (parseInt(ev.time.split(':')[0])%12||12) + ':' + ev.time.split(':')[1] : '—'}</div>
+                                        <div style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>{ev.time ? (parseInt(ev.time.split(':')[0])>=12?'PM':'AM') : ''}</div>
+                                      </div>
+                                      <div style={{ flex:1 }}>
+                                        <div style={{ fontWeight:600, fontSize:'0.78rem' }}>{ev.title}</div>
+                                        {ev.location && <div style={{ fontSize:'0.62rem', color:C.muted, marginTop:2 }}>📍 {ev.location}</div>}
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  <div style={{ ...s.sectionLabel, margin:'14px 0 8px', fontSize:'0.55rem' }}>Suggested for {day.label}<div style={s.labelLine}/></div>
+                                  {suggestions.map(sug => (
+                                    <div key={sug.id} style={{ display:'flex', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, background:C.warmBg, border:`1px dashed ${C.borderMed}` }}>
+                                      <div style={{ width:42, height:42, borderRadius:8, background:sug.heroGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem', flexShrink:0 }}>{sug.emoji}</div>
+                                      <div style={{ flex:1 }}>
+                                        <div style={{ fontWeight:600, fontSize:'0.76rem', lineHeight:1.3 }}>{sug.title}</div>
+                                        <div style={{ fontSize:'0.6rem', color:C.muted, marginTop:2 }}>📍 {sug.address} · {sug.timeLabel} · {sug.priceLabel}</div>
+                                        <div style={{ display:'flex', gap:4, marginTop:5 }}>
+                                          {sug.tags.map(t => (
+                                            <span key={t} style={{ fontSize:'0.5rem', letterSpacing:'0.06em', textTransform:'uppercase', fontWeight:700, padding:'2px 6px', borderRadius:6, background:C.sageBg, color:C.sage }}>{t}</span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <button onClick={()=>addSuggestionToPlanner(sug, day.iso, day.label)} style={{ alignSelf:'center', padding:'5px 9px', borderRadius:8, border:`1px solid ${C.sage}44`, background:C.card, color:C.sage, fontSize:'0.6rem', fontWeight:700, cursor:'pointer', letterSpacing:'0.04em', fontFamily:"'Outfit',sans-serif" }}>+ Add</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Right rail */}
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <div style={s.card()}>
+                          <div style={s.sectionLabel}>Weekend Pulse<div style={s.labelLine}/></div>
+                          {[
+                            ['Planned events', weekendPlannedCount],
+                            ['Open windows', Math.max(0, 6 - weekendPlannedCount)],
+                            ['Weather', `${wEmoji} ${wLabel}`],
+                            ['High / Low', `${weather?.temp??'—'}° / —`],
+                          ].map(([l,v],i) => (
+                            <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'6px 0', borderBottom:i<3?`1px solid ${C.border}`:'none', fontSize:'0.72rem', color:C.textSoft }}>
+                              <span>{l}</span>
+                              <b style={{ fontFamily:"'DM Serif Display',serif", fontSize: typeof v === 'number' ? '1.1rem' : '0.9rem', fontWeight:400 }}>{v}</b>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={s.card()}>
+                          <div style={s.sectionLabel}>Who's Free<div style={s.labelLine}/></div>
+                          {[
+                            { name:'Monroe', color:C.monroe, note:'Check T-ball schedule' },
+                            { name:'Genevieve', color:C.genevieve, note:'Wide open' },
+                            { name:'Anastasia', color:C.anastasia, note:'Naps 12–2pm both days' },
+                            { name:'Tanya', color:C.lavender, note:'Available all weekend' },
+                          ].map(p => (
+                            <div key={p.name} style={{ display:'flex', alignItems:'center', gap:8, fontSize:'0.7rem', color:C.textSoft, marginBottom:6 }}>
+                              <span style={{ width:8, height:8, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                              <span><b style={{ fontWeight:600 }}>{p.name}</b> — {p.note}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={s.card()}>
+                          <div style={s.sectionLabel}>Quick Add<div style={s.labelLine}/></div>
+                          <input placeholder="Type or speak naturally…" onKeyDown={e=>{ if(e.key==='Enter'&&e.target.value.trim()){ setAiInput(`Parse this and add to our planner: "${e.target.value.trim()}"`); setTab('assistant'); } }} style={{ ...s.input, marginBottom:8 }} />
+                          <div style={{ fontSize:'0.62rem', color:C.dim, lineHeight:1.5 }}>
+                            Try: <i>"Saturday brunch with the Cohens at 11"</i>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══ NEXT 30 DAYS ══════════════════════════════════ */}
+                {plannerTab === 'next30' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:18 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.9rem', lineHeight:1 }}>
+                          Next <span style={{ color:C.sage }}>30 Days</span>
+                        </div>
+                        <div style={{ fontSize:'0.7rem', color:C.muted, marginTop:6 }}>
+                          {eventsNext30.length} event{eventsNext30.length===1?'':'s'} · rolling window from today
+                        </div>
+                      </div>
+                      <button onClick={()=>setEventForm({ title:'', date:'', time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.7rem', padding:'8px 14px', letterSpacing:'0.04em' }}>+ Add Event</button>
+                    </div>
+
+                    {eventsNext30.length === 0 ? (
+                      <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                        <div style={{ fontSize:'2rem', marginBottom:8 }}>📆</div>
+                        <div style={{ fontSize:'0.8rem' }}>No events in the next 30 days.</div>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                        {eventsNext30.map(ev => {
+                          const d = new Date(ev.date+'T12:00:00')
+                          const daysOut = Math.round((d - now) / (1000*60*60*24))
+                          const label = daysOut === 0 ? 'Today' : daysOut === 1 ? 'Tomorrow' : daysOut < 7 ? `${daysOut} days` : `${Math.ceil(daysOut/7)} wk${daysOut>=14?'s':''}`
+                          return (
+                            <div key={ev.id} style={{ ...s.card({ borderLeft:`4px solid ${ev.color||C.sage}`, display:'flex', alignItems:'flex-start', gap:14 }) }}>
+                              <div style={{ minWidth:64, textAlign:'center' }}>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.5rem', lineHeight:1, color:ev.color||C.sage }}>{d.getDate()}</div>
+                                <div style={{ fontSize:'0.55rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>{MONTH_FULL[d.getMonth()].slice(0,3)} · {DAYS_FULL[d.getDay()].slice(0,3)}</div>
+                                <div style={{ fontSize:'0.55rem', marginTop:4, padding:'2px 7px', borderRadius:10, background:C.sageBg, color:C.sage, fontWeight:700, letterSpacing:'0.04em' }}>{label}</div>
+                              </div>
+                              <div style={{ flex:1 }}>
+                                <div style={{ fontWeight:700, fontSize:'0.9rem', marginBottom:3 }}>{ev.title}</div>
+                                <div style={{ display:'flex', gap:12, fontSize:'0.65rem', color:C.muted, flexWrap:'wrap' }}>
+                                  {ev.time && <span>🕐 {ev.time}</span>}
+                                  {ev.location && <span>📍 {ev.location}</span>}
+                                </div>
+                                {ev.description && <div style={{ fontSize:'0.7rem', color:C.textSoft, lineHeight:1.5, marginTop:6 }}>{ev.description}</div>}
+                              </div>
+                              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                                <a href={buildGCalUrl(ev)} target="_blank" rel="noopener noreferrer" style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`, background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700, textDecoration:'none', whiteSpace:'nowrap' }}>📅 gCal</a>
+                                <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ SUMMER 2026 DASHBOARD ════════════════════════ */}
+                {plannerTab === 'summer' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:18 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.9rem', lineHeight:1 }}>
+                          Summer <span style={{ color:C.sage }}>2026</span>
+                        </div>
+                        <div style={{ fontSize:'0.7rem', color:C.muted, marginTop:6 }}>
+                          Jun 1 – Aug 14 · 11 weeks · coverage at a glance
+                        </div>
+                      </div>
+                      <button onClick={()=>setPlannerTab('scenario')} style={{ ...s.btn(), fontSize:'0.7rem', padding:'8px 14px', letterSpacing:'0.04em' }}>Open Scenario Builder →</button>
+                    </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:14, alignItems:'start' }}>
+                      {/* Timeline */}
+                      <div style={{ background:C.card, borderRadius:14, border:`1px solid ${C.border}`, overflow:'hidden', boxShadow:C.shadow }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'110px 1fr 1fr', padding:'10px 16px', background:C.warmBg, fontSize:'0.55rem', letterSpacing:'0.16em', textTransform:'uppercase', fontWeight:700, color:C.muted, borderBottom:`1px solid ${C.border}` }}>
+                          <div>Week</div>
+                          <div>Monroe (5y)</div>
+                          <div>Genevieve (3y)</div>
+                        </div>
+                        {SUMMER_WEEKS.map((w, i) => {
+                          const monroe = getWeekCamp('Monroe', w.wk)
+                          const gen = getWeekCamp('Genevieve', w.wk)
+                          const renderSlot = (camp) => {
+                            if (camp) return (
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 10px', borderRadius:8, fontSize:'0.68rem', background:camp.color+'18', color:camp.color, fontWeight:600 }}>
+                                ✓ {camp.emoji} {camp.name.split(' ').slice(0,2).join(' ')}
+                              </span>
+                            )
+                            return (
+                              <span onClick={()=>setPlannerTab('scenario')} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 10px', borderRadius:8, fontSize:'0.68rem', background:C.roseBg, color:C.rose, fontWeight:600, cursor:'pointer' }}>
+                                ✗ No coverage · click to plan
+                              </span>
+                            )
+                          }
+                          return (
+                            <div key={w.wk} style={{ display:'grid', gridTemplateColumns:'110px 1fr 1fr', padding:'10px 16px', borderBottom:i<SUMMER_WEEKS.length-1?`1px solid ${C.border}`:'none', alignItems:'center', fontSize:'0.72rem' }}>
+                              <div style={{ fontWeight:600, color:C.textSoft }}>
+                                {w.start}–{w.end}
+                                <div style={{ fontSize:'0.55rem', color:C.dim, marginTop:2, letterSpacing:'0.1em', textTransform:'uppercase' }}>Wk {w.wk}</div>
+                              </div>
+                              <div>{renderSlot(monroe)}</div>
+                              <div>{renderSlot(gen)}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Right rail */}
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <div style={{ ...s.card({ background:`linear-gradient(135deg,${C.card},${C.warmBg})` }) }}>
+                          <div style={s.sectionLabel}>Coverage Status<div style={s.labelLine}/></div>
+                          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:8 }}>
+                            <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'2.2rem', color:C.monroe, lineHeight:1 }}>{weeksPlanned('Monroe')}</span>
+                            <span style={{ fontSize:'0.65rem', color:C.muted }}>/ 11 weeks Monroe</span>
+                          </div>
+                          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:12 }}>
+                            <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'2.2rem', color:C.genevieve, lineHeight:1 }}>{weeksPlanned('Genevieve')}</span>
+                            <span style={{ fontSize:'0.65rem', color:C.muted }}>/ 11 weeks Genevieve</span>
+                          </div>
+                          <span style={{ display:'inline-block', padding:'3px 9px', borderRadius:20, fontSize:'0.55rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', background:totalGaps>0?C.roseBg:C.sageBg, color:totalGaps>0?C.rose:C.sage }}>
+                            {totalGaps>0 ? `${totalGaps} gaps to fill` : 'Fully covered ✓'}
+                          </span>
+                        </div>
+
+                        <div style={s.card()}>
+                          <div style={s.sectionLabel}>Budget<div style={s.labelLine}/></div>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.8rem', color:C.sage, lineHeight:1 }}>${totalCost.toLocaleString()}</div>
+                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:10 }}>committed of ${SUMMER_BUDGET.toLocaleString()} budget</div>
+                          <div style={{ height:6, background:C.bg, borderRadius:3, overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${Math.min(100, (totalCost/SUMMER_BUDGET)*100)}%`, background:C.sage }} />
+                          </div>
+                        </div>
+
+                        <div style={s.card()}>
+                          <div style={s.sectionLabel}>Compare Plans<div style={s.labelLine}/></div>
+                          <div style={{ fontSize:'0.7rem', color:C.textSoft, lineHeight:1.5, marginBottom:10 }}>Run 2–3 summer scenarios side-by-side: cost, coverage, drive time.</div>
+                          <button onClick={()=>setPlannerTab('scenario')} style={{ ...s.btn(), width:'100%' }}>Open Scenario Builder →</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══ DISCOVER AUSTIN ═══════════════════════════════ */}
+                {plannerTab === 'discover' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:18 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.9rem', lineHeight:1 }}>
+                          Discover <span style={{ color:C.sage }}>Austin</span>
+                        </div>
+                        <div style={{ fontSize:'0.7rem', color:C.muted, marginTop:6 }}>
+                          Curated family events · tap + to add to your planner
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                      {['This Weekend','Free','Outdoor','Kids 3–6','Music','Food','Date Night'].map(f => (
+                        <button key={f} onClick={()=>setDiscoverFilter(f)} style={s.pill(discoverFilter===f)}>{f}</button>
+                      ))}
+                    </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px,1fr))', gap:14 }}>
+                      {filterDiscover().map(item => (
+                        <div key={item.id} style={{ background:C.card, borderRadius:14, border:`1px solid ${C.border}`, overflow:'hidden', boxShadow:C.shadow, display:'flex', flexDirection:'column' }}>
+                          <div style={{ height:90, background:item.heroGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2rem', color:'#fff' }}>{item.emoji}</div>
+                          <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', flex:1 }}>
+                            <div style={{ fontWeight:600, fontSize:'0.82rem', lineHeight:1.3 }}>{item.title}</div>
+                            <div style={{ fontSize:'0.62rem', color:C.muted, marginTop:4 }}>{item.timeLabel} · {item.address}</div>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}` }}>
+                              <span style={{ fontWeight:700, fontSize:'0.7rem', color:C.sage }}>{item.priceLabel}</span>
+                              <span style={{ fontSize:'0.55rem', letterSpacing:'0.06em', textTransform:'uppercase', fontWeight:700, color:C.muted, background:C.bg, padding:'2px 7px', borderRadius:6 }}>{item.ages}</span>
+                            </div>
+                            <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                              <button onClick={()=>addSuggestionToPlanner(item, item.dayPref==='sun'?weekend.sunIso:weekend.satIso, item.dayPref==='sun'?'Sunday':'Saturday')} style={{ flex:1, padding:'7px 8px', borderRadius:8, border:`1px solid ${C.sage}44`, background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', fontWeight:700, cursor:'pointer' }}>+ Add to Weekend</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* ── SCENARIO BUILDER ── */}
                 {plannerTab === 'scenario' && (
