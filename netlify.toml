@@ -1,10 +1,44 @@
 [build]
   command = "npm run build"
   publish = ".next"
- 
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
- 
+
 [build.environment]
   NODE_VERSION = "20"
+
+# ─── Google Auth edge function ────────────────────────────────────────────────
+[[edge_functions]]
+  path = "/api/google/auth/start"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/callback"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/refresh"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/logout"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/status"
+  function = "google-auth"
+
+# ─── Calendar sync edge function ─────────────────────────────────────────────
+[[edge_functions]]
+  path = "/api/calendar/list"
+  function = "calendar-sync"
+
+[[edge_functions]]
+  path = "/api/calendar/events"
+  function = "calendar-sync"
+
+[[edge_functions]]
+  path = "/api/calendar/events/*"
+  function = "calendar-sync"
  
