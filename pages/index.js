@@ -497,7 +497,7 @@ export default function BrockFamilyHub() {
     const nextBdayYear = now > thisYearBday ? now.getFullYear() + 1 : now.getFullYear();
     return nextBdayYear - dob.getFullYear();
   })()} 🎂`,
-  color: colors.rose
+  color: C.rose
 }
   ]
 
