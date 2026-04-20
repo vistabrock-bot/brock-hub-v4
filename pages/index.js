@@ -100,6 +100,7 @@ const SUMMER_WEEKS = [
 ]
 
 const SUMMER_BUDGET = 12000
+const BUDGET_WARNING_THRESHOLD = 0.9 // warn when camp cost exceeds 90% of budget
 
 const CAMPS = [
   { id:'kidventure', name:'Kidventure Discoverers', type:'Multi-Activity', emoji:'🌟',
@@ -571,10 +572,12 @@ export default function BrockFamilyHub() {
   }
 
   // Toast helper
+  const TOAST_DURATION_MS = 4000
+  const FOCUS_DELAY_MS    = 50
   const showScenarioToast = (message, undoFn) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setScenarioToast({ message, undoFn })
-    toastTimerRef.current = setTimeout(() => setScenarioToast(null), 4000)
+    toastTimerRef.current = setTimeout(() => setScenarioToast(null), TOAST_DURATION_MS)
   }
 
   // Custom camp CRUD helpers
@@ -1735,7 +1738,7 @@ export default function BrockFamilyHub() {
                           <div style={{ width:1, height:32, background:C.border }} />
                           <div>
                             <div style={{ fontSize:'0.58rem', color:C.muted, marginBottom:2 }}>Camp cost</div>
-                            <div style={{ fontSize:'0.82rem', fontWeight:700, color:kidWeekCost > SUMMER_BUDGET * 0.9 ? C.rose : C.sage }}>
+                            <div style={{ fontSize:'0.82rem', fontWeight:700, color:kidWeekCost > SUMMER_BUDGET * BUDGET_WARNING_THRESHOLD ? C.rose : C.sage }}>
                               ${kidWeekCost.toLocaleString()} <span style={{ fontWeight:400, color:C.muted, fontSize:'0.68rem' }}>of ${SUMMER_BUDGET.toLocaleString()}</span>
                             </div>
                           </div>
@@ -1947,7 +1950,7 @@ export default function BrockFamilyHub() {
                           `Assigned Week ${wk} to ${camp.name}`,
                           () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
                         )
-                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), 50)
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
                       }
 
                       const doRemove = () => {
@@ -1955,7 +1958,7 @@ export default function BrockFamilyHub() {
                         setWeekCamp(kid, wk, null)
                         setAssignModal(null)
                         showScenarioToast(`Removed Week ${wk} assignment`, () => setSchedule(snap))
-                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), 50)
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
                       }
 
                       const doOffweek = (label) => {
@@ -1966,7 +1969,7 @@ export default function BrockFamilyHub() {
                           `Week ${wk} marked as ${label}`,
                           () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
                         )
-                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), 50)
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
                       }
 
                       const doClear = () => {
@@ -1977,7 +1980,7 @@ export default function BrockFamilyHub() {
                           `Cleared Week ${wk}`,
                           () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
                         )
-                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), 50)
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
                       }
 
                       return (
