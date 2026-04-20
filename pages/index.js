@@ -59,6 +59,25 @@ function getAge(dob) {
   return `${age}y`
 }
 
+// Compute the coming weekend (Sat/Sun) relative to `today`.
+// Mon–Fri → next Sat/Sun  |  Sat → this Sat + Sun  |  Sun → prev Sat + this Sun
+function computeWeekendDates(today = new Date()) {
+  const dow = today.getDay() // 0=Sun, 6=Sat
+  const clone = (d) => new Date(d.getTime())
+  let sat, sun
+  if (dow === 0) {
+    sat = clone(today); sat.setDate(today.getDate() - 1)
+    sun = clone(today)
+  } else if (dow === 6) {
+    sat = clone(today)
+    sun = clone(today); sun.setDate(today.getDate() + 1)
+  } else {
+    sat = clone(today); sat.setDate(today.getDate() + (6 - dow))
+    sun = clone(sat); sun.setDate(sat.getDate() + 1)
+  }
+  return { sat, sun }
+}
+
 const EMERGENCY = [
   { label:'Pediatrician', name:'Austin Regional Clinic', phone:'(512) 555-0100', icon:'🩺' },
   { label:'Poison Control', name:'TX Poison Center', phone:'1-800-222-1222', icon:'☎️' },
@@ -142,6 +161,60 @@ const SCHOOLS = [
   { name:'Priscilla Pond Flawn Lab', short:'UT Lab School', address:'108 E Dean Keeton', driveMins:8, lastDay:'~May 16, 2026', firstDay:'Aug 2026', color:C.stone },
 ]
 
+// ─── CURATED AUSTIN FAMILY DISCOVER FEED ─────────────────────────
+// Categories: outdoor | kids | music | food | art | date
+// dayPref: 'sat' | 'sun' | 'any' (used by weekend suggestions)
+const DISCOVER_EVENTS = [
+  { id:'zilker-botanical', title:'Zilker Botanical Garden — Spring Bloom', emoji:'🌳', category:'outdoor',
+    venue:'Zilker Botanical Garden', address:'2220 Barton Springs Rd', dayPref:'sat',
+    timeLabel:'10am–4pm', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'thinkery-openmake', title:'Thinkery Family Studio — Open Make', emoji:'🎨', category:'kids',
+    venue:'Thinkery', address:'1830 Simond Ave', dayPref:'sat',
+    timeLabel:'11am–2pm', priceLabel:'$14', ages:'2+', tags:['Kids','Indoor'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#9B8FC4)' },
+  { id:'austin-symphony-family', title:'Austin Symphony — Family Concert', emoji:'🎶', category:'music',
+    venue:'Long Center', address:'701 W Riverside Dr', dayPref:'sat',
+    timeLabel:'11am', priceLabel:'$12 family', ages:'3+', tags:['Music','Kids'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'ladybird-loop', title:'Lady Bird Lake Loop — Family Bike Ride', emoji:'🚴', category:'outdoor',
+    venue:'Auditorium Shores', address:'800 W Riverside Dr', dayPref:'sun',
+    timeLabel:'Anytime', priceLabel:'Free', ages:'All ages', tags:['Outdoor','All ages'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#C4A882)' },
+  { id:'austin-zoo-toddler', title:'Austin Zoo — Toddler Sunday', emoji:'🦒', category:'kids',
+    venue:'Austin Zoo', address:'10808 Rawhide Trail', dayPref:'sun',
+    timeLabel:'9am–5pm', priceLabel:'$15/adult', ages:'Toddler+', tags:['Kids','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#C08B8B)' },
+  { id:'bouldin-brunch', title:'Pancake Breakfast — Bouldin Acres', emoji:'🥞', category:'food',
+    venue:'Bouldin Acres', address:'2027 S Lamar', dayPref:'sun',
+    timeLabel:'9am–12pm', priceLabel:'$$', ages:'All ages', tags:['Family','Brunch'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7BA3BE)' },
+  { id:'mckinney-falls', title:'McKinney Falls Family Hike', emoji:'🥾', category:'outdoor',
+    venue:'McKinney Falls State Park', address:'5808 McKinney Falls Pkwy', dayPref:'any',
+    timeLabel:'Open dawn–dusk', priceLabel:'$6/car', ages:'All ages', tags:['Outdoor','Hike'],
+    heroGrad:'linear-gradient(135deg,#7C9A82,#7BA3BE)' },
+  { id:'acl-live-datenight', title:'ACL Live — Date Night Show', emoji:'🎵', category:'date',
+    venue:'Moody Theater', address:'310 Willie Nelson Blvd', dayPref:'sat',
+    timeLabel:'8pm', priceLabel:'$45+', ages:'Adults', tags:['Date','Music'],
+    heroGrad:'linear-gradient(135deg,#C08B8B,#9B8FC4)' },
+  { id:'deep-eddy', title:'Deep Eddy Pool — Morning Swim', emoji:'🏊', category:'outdoor',
+    venue:'Deep Eddy Pool', address:'401 Deep Eddy Ave', dayPref:'sun',
+    timeLabel:'8am–8pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+  { id:'blantonkids', title:'Blanton Museum — Kids Gallery Hunt', emoji:'🖼️', category:'art',
+    venue:'Blanton Museum of Art', address:'200 E MLK Jr Blvd', dayPref:'any',
+    timeLabel:'10am–5pm', priceLabel:'Free Sun', ages:'3+', tags:['Art','Indoor'],
+    heroGrad:'linear-gradient(135deg,#9B8FC4,#7BA3BE)' },
+  { id:'mueller-farmers', title:'Mueller Farmers Market', emoji:'🥕', category:'food',
+    venue:'Branch Park Pavilion', address:'2300 Barbara Jordan Blvd', dayPref:'sun',
+    timeLabel:'10am–2pm', priceLabel:'Free entry', ages:'All ages', tags:['Food','Outdoor'],
+    heroGrad:'linear-gradient(135deg,#C4A882,#7C9A82)' },
+  { id:'barton-springs', title:'Barton Springs — Family Splash', emoji:'💦', category:'outdoor',
+    venue:'Barton Springs Pool', address:'2201 William Barton Dr', dayPref:'any',
+    timeLabel:'5am–10pm', priceLabel:'$5/adult', ages:'All ages', tags:['Outdoor','Swim'],
+    heroGrad:'linear-gradient(135deg,#7BA3BE,#7C9A82)' },
+]
+
 const WMO_EMOJI = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌦️',53:'🌦️',61:'🌧️',63:'🌧️',65:'⛈️',71:'❄️',80:'🌦️',95:'⛈️'}
 const WMO_LABEL = {0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',51:'Light drizzle',53:'Drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',71:'Snow',80:'Showers',95:'Thunderstorm'}
 const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -223,7 +296,7 @@ function buildGCalUrl(event) {
 // ─── MAIN COMPONENT ─────────────────────────────────────────────
 export default function BrockFamilyHub() {
   const [tab, setTab]           = useState('home')
-  const [plannerTab, setPlannerTab] = useState('scenario')
+  const [plannerTab, setPlannerTab] = useState('this-weekend')
   const [lang, setLang]         = useState('en')
   const [now, setNow]           = useState(new Date())
   const [weather, setWeather]   = useState(null)
@@ -275,10 +348,20 @@ export default function BrockFamilyHub() {
   const chatRef = useRef(null)
   const ru = lang === 'ru'
 
+  // Discover / Weekend state
+  const [weekendSuggestions, setWeekendSuggestions] = useState([])
+  const [weekendSuggestionsLoading, setWeekendSuggestionsLoading] = useState(false)
+  const [discoverEvents, setDiscoverEvents] = useState([])
+  const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [discoverFilter, setDiscoverFilter] = useState('This Weekend')
+  const [discoverLastUpdated, setDiscoverLastUpdated] = useState(null)
+  const [quickAddText, setQuickAddText] = useState('')
+  const [weekendWeather, setWeekendWeather] = useState({ sat: null, sun: null })
+
   // Hydrate from localStorage on mount
   useEffect(() => {
     setSchedule(loadLS('schedule', {}))
-    setPlannerTab(loadLS('plannerTab', 'scenario'))
+    setPlannerTab(loadLS('plannerTab', 'this-weekend'))
     setTasks(loadLS('tasks', [
       { id:1, text:"Register Monroe for Kidventure Week 1", done:false, who:'Bakari', ts:Date.now()-86400000 },
       { id:2, text:"Schedule Anastasia's 6-month checkup", done:false, who:'Jenya', ts:Date.now()-43200000 },
@@ -339,6 +422,25 @@ export default function BrockFamilyHub() {
       .catch(() => setWeather({ temp:82, code:1, wind:8 }))
   }, [])
 
+  // Weekend forecast weather
+  useEffect(() => {
+    const { sat, sun } = computeWeekendDates()
+    const pad = n => String(n).padStart(2,'0')
+    const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+    const satStr = fmt(sat), sunStr = fmt(sun)
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=30.2672&longitude=-97.7431&daily=weathercode,temperature_2m_max&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=14')
+      .then(r=>r.json())
+      .then(d=>{
+        const dates = d.daily.time
+        const si = dates.indexOf(satStr), ni = dates.indexOf(sunStr)
+        setWeekendWeather({
+          sat: si>=0?{code:d.daily.weathercode[si],temp:Math.round(d.daily.temperature_2m_max[si])}:{code:1,temp:82},
+          sun: ni>=0?{code:d.daily.weathercode[ni],temp:Math.round(d.daily.temperature_2m_max[ni])}:{code:1,temp:82}
+        })
+      })
+      .catch(()=>setWeekendWeather({sat:{code:1,temp:82},sun:{code:1,temp:82}}))
+  }, [])
+
   // AI send
   const sendAI = useCallback(async () => {
     const msg = aiInput.trim()
@@ -373,6 +475,48 @@ export default function BrockFamilyHub() {
   }, [aiInput, aiMsgs, aiLoading, schedule])
 
   useEffect(() => { chatRef.current?.scrollIntoView({ behavior:'smooth' }) }, [aiMsgs])
+
+  // Fetch helpers for Discover / Weekend
+  const fetchWeekendSuggestions = useCallback(async () => {
+    setWeekendSuggestionsLoading(true)
+    try {
+      const res = await fetch('/api/discover?horizon=this%20weekend&filter=family')
+      const data = await res.json()
+      setWeekendSuggestions((data.events || []).slice(0, 6))
+    } catch {
+      setWeekendSuggestions([])
+    } finally {
+      setWeekendSuggestionsLoading(false)
+    }
+  }, [])
+
+  const fetchDiscover = useCallback(async (horizon='this weekend', filter='family') => {
+    setDiscoverLoading(true)
+    try {
+      const res = await fetch(`/api/discover?horizon=${encodeURIComponent(horizon)}&filter=${encodeURIComponent(filter)}`)
+      const data = await res.json()
+      setDiscoverEvents(data.events || [])
+      setDiscoverLastUpdated(data.updated || new Date().toISOString())
+    } catch {
+      setDiscoverEvents([])
+    } finally {
+      setDiscoverLoading(false)
+    }
+  }, [])
+
+  // Fetch weekend suggestions when landing on this-weekend view
+  useEffect(() => {
+    if (plannerTab === 'this-weekend' && weekendSuggestions.length === 0 && !weekendSuggestionsLoading) {
+      fetchWeekendSuggestions()
+    }
+  }, [plannerTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch discover events when navigating to discover view or changing filter
+  useEffect(() => {
+    if (plannerTab === 'discover') {
+      fetchDiscover(discoverFilter.toLowerCase(), 'family')
+    }
+  }, [plannerTab, discoverFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Schedule helpers
   const allCamps = [...CAMPS, ...customCamps]
@@ -463,8 +607,45 @@ export default function BrockFamilyHub() {
     { date:'Jun 1',  label:'Summer camps begin', color:C.sage },
     { date:'Aug 14', label:'Summer camps end', color:C.sage },
     { date:'Aug 24', label:'Westminster resumes — Monroe starts K!', color:C.sky },
-    { date:'Nov 11', label:"Anastasia turns 1 🎂", color:C.rose },
+     {
+  date: "Nov 11",
+  label: `Anastasia turns ${(() => {
+    const dob = new Date(2025, 10, 11); // Nov 11, 2025
+    const now = new Date();
+    const thisYearBday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+    const nextBdayYear = now > thisYearBday ? now.getFullYear() + 1 : now.getFullYear();
+    return nextBdayYear - dob.getFullYear();
+  })()} 🎂`,
+  color: C.rose
+}
   ]
+
+  // ─── WEEKEND DATE HELPERS ──────────────────────────────────────
+  const getWeekendDates = (today = new Date()) => computeWeekendDates(today)
+  const { sat: weekendSat, sun: weekendSun } = getWeekendDates(now)
+  const padDate = n => String(n).padStart(2,'0')
+  const fmtDateKey = d => `${d.getFullYear()}-${padDate(d.getMonth()+1)}-${padDate(d.getDate())}`
+  const weekendSatStr = fmtDateKey(weekendSat)
+  const weekendSunStr = fmtDateKey(weekendSun)
+
+  // Summer 2026 gap count
+  const summerGaps = (() => {
+    let gaps = 0
+    ;['Monroe','Genevieve'].forEach(kid => {
+      SUMMER_WEEKS.forEach(week => { if (!schedule[`${kid}-${week.wk}`]) gaps++ })
+    })
+    return gaps
+  })()
+
+  // Quick-add natural language parse
+  const parseQuickAdd = (text) => {
+    const satMatch = /\bsat(urday)?\b/i.test(text)
+    const sunMatch = /\bsun(day)?\b/i.test(text)
+    const timeMatch = text.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i)
+    const title = text.replace(/\b(sat(urday)?|sun(day)?)\b/gi, '').replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi, '').trim().replace(/\s+/g, ' ')
+    const dateObj = sunMatch ? weekendSun : weekendSat
+    return { title: title || text, date: fmtDateKey(dateObj), time: timeMatch ? timeMatch[1] : '', color: C.sage }
+  }
 
   // ─── STYLES ────────────────────────────────────────────────────
   const s = {
@@ -833,15 +1014,42 @@ export default function BrockFamilyHub() {
 
           {/* ── PLANNER TAB ─────────────────────────────────── */}
           {tab === 'planner' && (
-            <div style={{ display:'grid', gridTemplateColumns:'200px 1fr', gap:16, alignItems:'start' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:16, alignItems:'start' }}>
 
               {/* Sidebar nav */}
               <div style={{ ...s.card({ padding:'10px 8px' }), position:'sticky', top:80 }}>
-                <div style={{ fontSize:'0.52rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 10px' }}>Planner</div>
+                {/* Plan Horizon section */}
+                <div style={{ fontSize:'0.5rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'4px 10px 8px' }}>Plan Horizon</div>
                 {[
-                  ['scenario','🗓️','Summer Scenario Builder'],
-                  ['camps','🏕️','Camps'],
-                  ['events','📆','Events'],
+                  ['this-weekend','🌤️','This Weekend', null],
+                  ['next-30','📅','Next 30 Days', null],
+                  ['summer-2026','☀️','Summer 2026', summerGaps > 0 ? summerGaps : null],
+                  ['discover','🎟️','Discover Austin', null],
+                ].map(([id,icon,label,badge]) => (
+                  <button key={id} onClick={()=>setPlannerTab(id)} style={{
+                    display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
+                    borderRadius:9, border:'none', cursor:'pointer', textAlign:'left',
+                    fontFamily:"'Outfit',sans-serif", fontSize:'0.72rem', fontWeight:plannerTab===id?700:500,
+                    background:plannerTab===id?C.sage+'18':'transparent',
+                    color:plannerTab===id?C.sage:C.textSoft,
+                    borderLeft:`3px solid ${plannerTab===id?C.sage:'transparent'}`,
+                    transition:'all 0.15s',
+                  }}>
+                    <span style={{ fontSize:'0.9rem' }}>{icon}</span>
+                    <span style={{ flex:1 }}>{label}</span>
+                    {badge && (
+                      <span style={{ background:C.rose, color:'#fff', borderRadius:10, fontSize:'0.5rem', fontWeight:700, padding:'2px 6px', minWidth:18, textAlign:'center' }}>{badge}</span>
+                    )}
+                  </button>
+                ))}
+
+                {/* Manage section */}
+                <div style={{ fontSize:'0.5rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'12px 10px 8px', marginTop:4, borderTop:`1px solid ${C.border}` }}>Manage</div>
+                {[
+                  ['all-events','🗂','All Events'],
+                  ['camps','🏕️','Camps Library'],
+                  ['scenario','🧠','Scenario Builder'],
+                  ['sync','🔄','Sync Settings'],
                 ].map(([id,icon,label]) => (
                   <button key={id} onClick={()=>setPlannerTab(id)} style={{
                     display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
@@ -855,20 +1063,6 @@ export default function BrockFamilyHub() {
                     <span style={{ fontSize:'0.9rem' }}>{icon}</span>{label}
                   </button>
                 ))}
-
-                {/* Manage section */}
-                <div style={{ fontSize:'0.48rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.dim, fontWeight:700, padding:'12px 10px 6px' }}>Manage</div>
-                <button onClick={()=>setPlannerTab('sync')} style={{
-                  display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
-                  borderRadius:9, border:'none', cursor:'pointer', textAlign:'left',
-                  fontFamily:"'Outfit',sans-serif", fontSize:'0.72rem', fontWeight:plannerTab==='sync'?700:500,
-                  background:plannerTab==='sync'?C.sage+'18':'transparent',
-                  color:plannerTab==='sync'?C.sage:C.textSoft,
-                  borderLeft:`3px solid ${plannerTab==='sync'?C.sage:'transparent'}`,
-                  transition:'all 0.15s',
-                }}>
-                  <span style={{ fontSize:'0.9rem' }}>🔄</span>Sync Settings
-                </button>
 
                 {/* Sync status mini-card */}
                 <div style={{ margin:'12px 4px 4px', padding:'10px 10px', borderRadius:9, background:C.bg, border:`1px solid ${C.border}` }}>
@@ -895,7 +1089,548 @@ export default function BrockFamilyHub() {
               {/* Submodule content */}
               <div>
 
-                {/* ── SCENARIO BUILDER ── */}
+                {/* ── VIEW 1: THIS WEEKEND ── */}
+                {plannerTab === 'this-weekend' && (
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16, alignItems:'start' }}>
+                    {/* Main: Sat + Sun cards */}
+                    <div>
+                      <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem', marginBottom:16 }}>
+                        This <span style={{ color:C.sage }}>Weekend</span>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                        {[
+                          { day: weekendSat, label: 'Saturday', dateStr: weekendSatStr, ww: weekendWeather.sat, suggestions: weekendSuggestions.slice(0,3) },
+                          { day: weekendSun, label: 'Sunday',   dateStr: weekendSunStr, ww: weekendWeather.sun, suggestions: weekendSuggestions.slice(3,6) },
+                        ].map(({ day, label, dateStr, ww, suggestions }) => {
+                          const dayEvents = sortedEvents.filter(e => e.date === dateStr)
+                          return (
+                            <div key={label} style={s.card()}>
+                              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+                                <div>
+                                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.4rem' }}>{label}</div>
+                                  <div style={{ fontSize:'0.62rem', color:C.muted }}>
+                                    {MONTH_FULL[day.getMonth()].slice(0,3)} {day.getDate()}, {day.getFullYear()}
+                                  </div>
+                                </div>
+                                {ww && (
+                                  <div style={{ fontSize:'0.62rem', background:C.bg, border:`1px solid ${C.border}`, borderRadius:20, padding:'4px 10px', display:'flex', alignItems:'center', gap:4 }}>
+                                    <span>{WMO_EMOJI[ww.code]||'🌤️'}</span><span>{ww.temp}°F</span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* Planned events */}
+                              <div style={{ marginBottom:12 }}>
+                                <div style={{ fontSize:'0.56rem', letterSpacing:'0.14em', textTransform:'uppercase', color:C.muted, fontWeight:700, marginBottom:6 }}>Planned</div>
+                                {dayEvents.length === 0 ? (
+                                  <div style={{ fontSize:'0.7rem', color:C.dim, fontStyle:'italic' }}>Nothing planned yet — pick from below ↓</div>
+                                ) : dayEvents.map(ev => (
+                                  <div key={ev.id} style={{ display:'flex', gap:8, padding:'6px 8px', borderRadius:8, borderLeft:`3px solid ${ev.color||C.sage}`, background:(ev.color||C.sage)+'08', marginBottom:4 }}>
+                                    <div style={{ flex:1 }}>
+                                      <div style={{ fontSize:'0.75rem', fontWeight:600 }}>{ev.title}</div>
+                                      <div style={{ fontSize:'0.58rem', color:C.muted }}>{ev.time&&`🕐 ${ev.time}`}{ev.location&&` · 📍 ${ev.location}`}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* Suggestions */}
+                              <div>
+                                <div style={{ fontSize:'0.56rem', letterSpacing:'0.14em', textTransform:'uppercase', color:C.muted, fontWeight:700, marginBottom:6 }}>Suggested for {label}</div>
+                                {weekendSuggestionsLoading ? (
+                                  <div style={{ fontSize:'0.7rem', color:C.dim }}>Loading Austin events…</div>
+                                ) : suggestions.length === 0 ? (
+                                  <div style={{ fontSize:'0.7rem', color:C.dim }}>No suggestions available.</div>
+                                ) : suggestions.map(ev => (
+                                  <div key={ev.id} style={{ padding:'8px 10px', borderRadius:9, border:`1px solid ${C.border}`, marginBottom:6, background:C.bg }}>
+                                    <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+                                      <span style={{ fontSize:'1.2rem', flexShrink:0 }}>{ev.emoji||'🎉'}</span>
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:'0.75rem', fontWeight:600, marginBottom:2 }}>{ev.title}</div>
+                                        <div style={{ fontSize:'0.58rem', color:C.muted, lineHeight:1.4 }}>
+                                          {ev.time&&`🕐 ${ev.time} · `}{ev.location&&`📍 ${ev.location}`}{ev.price&&` · ${ev.price}`}
+                                        </div>
+                                        <div style={{ display:'flex', gap:4, marginTop:4, flexWrap:'wrap' }}>
+                                          {ev.category&&<span style={{ fontSize:'0.52rem', padding:'1px 6px', borderRadius:8, background:C.sage+'15', color:C.sage, fontWeight:700 }}>{ev.category}</span>}
+                                          {ev.ageRange&&<span style={{ fontSize:'0.52rem', padding:'1px 6px', borderRadius:8, background:C.stone+'15', color:C.stone, fontWeight:700 }}>{ev.ageRange}</span>}
+                                        </div>
+                                      </div>
+                                      <button onClick={()=>saveEvent({ title:ev.title, date:dateStr, time:ev.time||'', location:ev.location||'', description:[ev.price,ev.url].filter(Boolean).join(' · '), color:C.sage })} style={{ ...s.btn(), padding:'5px 10px', fontSize:'0.6rem', flexShrink:0 }}>+ Add</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    {/* Right rail */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                      {/* Weekend Pulse */}
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Weekend Pulse<div style={s.labelLine}/></div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem' }}>
+                            <span style={{ color:C.muted }}>Planned events</span>
+                            <span style={{ fontWeight:700 }}>{events.filter(e=>e.date===weekendSatStr||e.date===weekendSunStr).length}</span>
+                          </div>
+                          {weekendWeather.sat && (
+                            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem' }}>
+                              <span style={{ color:C.muted }}>Saturday</span>
+                              <span>{WMO_EMOJI[weekendWeather.sat.code]||'🌤️'} {weekendWeather.sat.temp}°F</span>
+                            </div>
+                          )}
+                          {weekendWeather.sun && (
+                            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem' }}>
+                              <span style={{ color:C.muted }}>Sunday</span>
+                              <span>{WMO_EMOJI[weekendWeather.sun.code]||'🌤️'} {weekendWeather.sun.temp}°F</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Who's Free */}
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Who&apos;s Free<div style={s.labelLine}/></div>
+                        {[
+                          { name:'Monroe',    emoji:'⚾', color:C.monroe,    note:'Free' },
+                          { name:'Genevieve', emoji:'🩰', color:C.genevieve, note:'Free' },
+                          { name:'Anastasia', emoji:'💛', color:C.anastasia, note:'Napping 12–2pm' },
+                          { name:'Tanya',     emoji:'👵', color:C.muted,     note:'Free' },
+                        ].map(p => (
+                          <div key={p.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:`1px solid ${C.border}` }}>
+                            <span style={{ fontSize:'0.9rem' }}>{p.emoji}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:'0.72rem', fontWeight:600, color:p.color }}>{p.name}</div>
+                              <div style={{ fontSize:'0.58rem', color:C.muted }}>{p.note}</div>
+                            </div>
+                            <span style={{ fontSize:'0.52rem', padding:'2px 7px', borderRadius:8, background:C.sage+'15', color:C.sage, fontWeight:700 }}>✓ Free</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Quick Add */}
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Quick Add<div style={s.labelLine}/></div>
+                        <input
+                          value={quickAddText}
+                          onChange={e=>setQuickAddText(e.target.value)}
+                          onKeyDown={e=>{ if(e.key==='Enter'&&quickAddText.trim()){ saveEvent(parseQuickAdd(quickAddText)); setQuickAddText('') } }}
+                          placeholder="Type naturally… e.g. Sat 10am park"
+                          style={{ ...s.input, marginBottom:8 }}
+                        />
+                        <button onClick={()=>{ if(quickAddText.trim()){ saveEvent(parseQuickAdd(quickAddText)); setQuickAddText('') } }} style={{ ...s.btn(), width:'100%' }}>
+                          Parse &amp; Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── VIEW 2: NEXT 30 DAYS ── */}
+                {plannerTab === 'next-30' && (() => {
+                  const todayD = new Date(); todayD.setHours(0,0,0,0)
+                  const limitD = new Date(todayD); limitD.setDate(todayD.getDate()+30)
+                  const next30 = sortedEvents.filter(e => {
+                    if (!e.date) return false
+                    const d = new Date(e.date+'T12:00:00')
+                    return d >= todayD && d <= limitD
+                  })
+                  return (
+                    <div>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                        <div>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                            Next <span style={{ color:C.sage }}>30 Days</span>
+                          </div>
+                          <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>{next30.length} events coming up</div>
+                        </div>
+                        <button onClick={()=>setEventForm({ title:'', date:'', time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Event</button>
+                      </div>
+                      {next30.length === 0 ? (
+                        <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                          <div style={{ fontSize:'2rem', marginBottom:8 }}>📅</div>
+                          <div style={{ fontSize:'0.8rem' }}>No events in the next 30 days.</div>
+                        </div>
+                      ) : (
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                          {next30.map(ev => (
+                            <div key={ev.id} style={{ ...s.card({ borderLeft:`4px solid ${ev.color||C.sage}`, display:'flex', alignItems:'flex-start', gap:14 }) }}>
+                              <div style={{ minWidth:54, textAlign:'center' }}>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.5rem', lineHeight:1, color:ev.color||C.sage }}>{new Date(ev.date+'T12:00:00').getDate()}</div>
+                                <div style={{ fontSize:'0.55rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>{MONTH_FULL[new Date(ev.date+'T12:00:00').getMonth()]?.slice(0,3)}</div>
+                              </div>
+                              <div style={{ flex:1 }}>
+                                <div style={{ fontWeight:700, fontSize:'0.9rem', marginBottom:3 }}>{ev.title}</div>
+                                <div style={{ display:'flex', gap:12, fontSize:'0.65rem', color:C.muted, flexWrap:'wrap', marginBottom:ev.description?6:0 }}>
+                                  {ev.time&&<span>🕐 {ev.time}</span>}
+                                  {ev.location&&<span>📍 {ev.location}</span>}
+                                </div>
+                                {ev.description&&<div style={{ fontSize:'0.72rem', color:C.textSoft, lineHeight:1.5 }}>{ev.description}</div>}
+                              </div>
+                              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                                <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                                <button onClick={()=>deleteEvent(ev.id)} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── VIEW 3: SUMMER 2026 ── */}
+                {plannerTab === 'summer-2026' && (
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 260px', gap:16, alignItems:'start' }}>
+                    <div>
+                      <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem', marginBottom:4 }}>
+                        Summer <span style={{ color:C.sage }}>2026</span>
+                      </div>
+                      <div style={{ fontSize:'0.63rem', color:C.muted, marginBottom:16 }}>Jun 1 – Aug 14 · 11 weeks · Coverage overview</div>
+                      <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.72rem' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:'0.56rem', letterSpacing:'0.12em', textTransform:'uppercase', color:C.muted, fontWeight:700, borderBottom:`1px solid ${C.border}`, minWidth:110 }}>Week</th>
+                              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:'0.56rem', letterSpacing:'0.12em', textTransform:'uppercase', color:C.monroe, fontWeight:700, borderBottom:`1px solid ${C.border}` }}>Monroe (5y)</th>
+                              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:'0.56rem', letterSpacing:'0.12em', textTransform:'uppercase', color:C.genevieve, fontWeight:700, borderBottom:`1px solid ${C.border}` }}>Genevieve (3y)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {SUMMER_WEEKS.map((week, wi) => (
+                              <tr key={week.wk} style={{ background: wi%2===0?C.bg:'transparent' }}>
+                                <td style={{ padding:'8px 12px', color:C.textSoft, whiteSpace:'nowrap' }}>
+                                  <span style={{ fontWeight:600 }}>W{week.wk}</span> <span style={{ color:C.muted, fontSize:'0.65rem' }}>{week.start}–{week.end}</span>
+                                </td>
+                                {['Monroe','Genevieve'].map(kid => {
+                                  const camp = getWeekCamp(kid, week.wk)
+                                  if (!camp) return (
+                                    <td key={kid} style={{ padding:'8px 12px' }}>
+                                      <span style={{ background:C.rose+'20', color:C.rose, padding:'3px 8px', borderRadius:6, fontSize:'0.65rem', fontWeight:600 }}>✗ No coverage</span>
+                                    </td>
+                                  )
+                                  const isFull = camp.fullDay === true
+                                  return (
+                                    <td key={kid} style={{ padding:'8px 12px' }}>
+                                      <span style={{ background:isFull?C.sage+'20':C.stone+'25', color:isFull?C.sage:C.stone, padding:'3px 8px', borderRadius:6, fontSize:'0.65rem', fontWeight:600 }}>
+                                        {isFull?'✓':'~'} {camp.name.split(' ').slice(0,2).join(' ')}
+                                      </span>
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {/* Right rail */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Coverage<div style={s.labelLine}/></div>
+                        {['Monroe','Genevieve'].map(kid => {
+                          const planned = SUMMER_WEEKS.filter(w=>getWeekCamp(kid,w.wk)).length
+                          const m = FAMILY_MEMBERS.find(fm=>fm.name===kid)
+                          return (
+                            <div key={kid} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', marginBottom:6 }}>
+                              <span style={{ color:m?.color, fontWeight:600 }}>{kid}</span>
+                              <span>{planned}/11 weeks</span>
+                            </div>
+                          )
+                        })}
+                        <div style={{ marginTop:8 }}>
+                          <span style={{ background:C.rose, color:'#fff', borderRadius:20, fontSize:'0.56rem', fontWeight:700, padding:'3px 10px' }}>{summerGaps} gaps to fill</span>
+                        </div>
+                      </div>
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Budget<div style={s.labelLine}/></div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.1rem', marginBottom:4 }}>
+                          ${totalCost.toLocaleString()} <span style={{ fontSize:'0.7rem', color:C.muted }}>/ $8,500</span>
+                        </div>
+                        <div style={{ background:C.border, borderRadius:10, height:8, overflow:'hidden', marginBottom:4 }}>
+                          <div style={{ background:totalCost/8500>0.8?C.rose:C.sage, height:'100%', width:`${Math.min(100,(totalCost/8500)*100)}%`, borderRadius:10, transition:'width 0.3s' }}/>
+                        </div>
+                        <div style={{ fontSize:'0.6rem', color:C.muted }}>{Math.round((totalCost/8500)*100)}% of summer budget used</div>
+                      </div>
+                      <div style={{ ...s.card({ borderColor:C.sage+'44', background:C.sageBg }) }}>
+                        <div style={{ fontSize:'0.75rem', fontWeight:700, marginBottom:4 }}>🧠 Scenario Builder</div>
+                        <div style={{ fontSize:'0.62rem', color:C.muted, marginBottom:10 }}>Assign camps week by week for Monroe &amp; Genevieve</div>
+                        <button onClick={()=>setPlannerTab('scenario')} style={{ ...s.btn(), width:'100%', fontSize:'0.65rem' }}>Open Scenario Builder →</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── VIEW 4: DISCOVER AUSTIN ── */}
+                {plannerTab === 'discover' && (
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 240px', gap:16, alignItems:'start' }}>
+                    <div>
+                      <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem', marginBottom:4 }}>
+                        Discover <span style={{ color:C.sage }}>Austin</span>
+                      </div>
+                      {/* Filter chips */}
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                        {['This Weekend','Next 7 days','Free','Outdoor','Kids 3–6','Music','Food','Date Night'].map(f => (
+                          <button key={f} style={s.pill(discoverFilter===f)} onClick={()=>setDiscoverFilter(f)}>{f}</button>
+                        ))}
+                      </div>
+                      {discoverLoading ? (
+                        <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                          <div style={{ fontSize:'2rem', marginBottom:8 }}>🔍</div>
+                          <div style={{ fontSize:'0.8rem' }}>Searching Austin for events…</div>
+                        </div>
+                      ) : discoverEvents.length === 0 ? (
+                        <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                          <div style={{ fontSize:'2rem', marginBottom:8 }}>🎟️</div>
+                          <div style={{ fontSize:'0.8rem' }}>No events found. Try a different filter or refresh.</div>
+                        </div>
+                      ) : (
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px,1fr))', gap:14 }}>
+                          {discoverEvents.map(ev => {
+                            const catColor = {outdoor:C.sage,kids:C.stone,music:C.sky,food:C.rose,arts:C.lavender,sports:C.sage,datenight:C.rose}[ev.category] || C.sage
+                            return (
+                              <div key={ev.id} style={{ ...s.card({ display:'flex', flexDirection:'column', overflow:'hidden', padding:0 }) }}>
+                                <div style={{ background:`linear-gradient(135deg, ${catColor}25, ${catColor}10)`, padding:'16px 16px 12px', display:'flex', alignItems:'center', gap:10 }}>
+                                  <span style={{ fontSize:'2rem' }}>{ev.emoji||'🎉'}</span>
+                                  <div>
+                                    <div style={{ fontWeight:700, fontSize:'0.85rem', lineHeight:1.3 }}>{ev.title}</div>
+                                    <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:2 }}>{ev.date}{ev.time&&` · ${ev.time}`}</div>
+                                  </div>
+                                </div>
+                                <div style={{ padding:'10px 16px 14px', flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+                                  {ev.location&&<div style={{ fontSize:'0.65rem', color:C.textSoft }}>📍 {ev.location}</div>}
+                                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                    {ev.price&&<span style={{ fontSize:'0.58rem', padding:'2px 8px', borderRadius:8, background:C.sage+'12', color:C.sage, fontWeight:700 }}>{ev.price}</span>}
+                                    {ev.ageRange&&<span style={{ fontSize:'0.58rem', padding:'2px 8px', borderRadius:8, background:C.stone+'15', color:C.stone, fontWeight:700 }}>{ev.ageRange}</span>}
+                                  </div>
+                                  <div style={{ marginTop:'auto' }}>
+                                    <button onClick={()=>setEventForm({ title:ev.title, date:'', time:ev.time||'', location:ev.location||'', description:[ev.price,ev.source?`Source: ${ev.source}`:'',ev.url].filter(Boolean).join(' · '), color:catColor })} style={{ ...s.btn(catColor), width:'100%', fontSize:'0.65rem', padding:'7px' }}>
+                                      + Add to plan
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Right rail */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Sources<div style={s.labelLine}/></div>
+                        {['do512.com','austin360.com','visitaustin.com','JCC Austin','Westminster','Thinkery ATX','Ticketmaster'].map(src => (
+                          <div key={src} style={{ fontSize:'0.65rem', color:C.textSoft, padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>🔗 {src}</div>
+                        ))}
+                      </div>
+                      <div style={s.card()}>
+                        <div style={s.sectionLabel}>Last Updated<div style={s.labelLine}/></div>
+                        <div style={{ fontSize:'0.65rem', color:C.textSoft, marginBottom:8 }}>
+                          {discoverLastUpdated ? new Date(discoverLastUpdated).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Not yet loaded'}
+                        </div>
+                        <button onClick={()=>fetchDiscover(discoverFilter.toLowerCase(),'family')} style={{ ...s.btn(), width:'100%', fontSize:'0.65rem', padding:'7px' }}>
+                          🔄 Refresh
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── VIEW 5: ALL EVENTS (demoted to Manage) ── */}
+                {plannerTab === 'all-events' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Family <span style={{ color:C.sage }}>Events</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Manage family events · Add to Google Calendar · CRUD supported
+                        </div>
+                      </div>
+                      <button onClick={()=>setEventForm({ title:'', date:'', time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Event</button>
+                    </div>
+
+                    {sortedEvents.length === 0 && (
+                      <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
+                        <div style={{ fontSize:'2rem', marginBottom:8 }}>📆</div>
+                        <div style={{ fontSize:'0.8rem' }}>No events yet. Add your first family event!</div>
+                      </div>
+                    )}
+
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {sortedEvents.map(ev => (
+                        <div key={ev.id} style={{ ...s.card({ borderLeft:`4px solid ${ev.color||C.sage}`, display:'flex', alignItems:'flex-start', gap:14 }) }}>
+                          <div style={{ minWidth:54, textAlign:'center' }}>
+                            {ev.date ? (
+                              <>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.5rem', lineHeight:1, color:ev.color||C.sage }}>{new Date(ev.date+'T12:00:00').getDate()}</div>
+                                <div style={{ fontSize:'0.55rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>
+                                  {MONTH_FULL[new Date(ev.date+'T12:00:00').getMonth()]?.slice(0,3)}
+                                </div>
+                              </>
+                            ) : <div style={{ fontSize:'0.65rem', color:C.muted }}>TBD</div>}
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700, fontSize:'0.9rem', marginBottom:3 }}>{ev.title}</div>
+                            <div style={{ display:'flex', gap:12, fontSize:'0.65rem', color:C.muted, flexWrap:'wrap', marginBottom:ev.description?6:0 }}>
+                              {ev.time&&<span>🕐 {ev.time}</span>}
+                              {ev.location&&<span>📍 {ev.location}</span>}
+                            </div>
+                            {ev.description&&<div style={{ fontSize:'0.72rem', color:C.textSoft, lineHeight:1.5 }}>{ev.description}</div>}
+                          </div>
+                          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                            {(() => {
+                              // When synced, link directly to the event; otherwise use template URL
+                              const eid = ev.gcalEventId
+                                ? btoa([ev.gcalEventId, ev.gcalCalendarId].filter(Boolean).join(' '))
+                                : null
+                              const gcalUrl = eid
+                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
+                                : buildGCalUrl(ev)
+                              return (
+                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title={eid ? 'Open in Google Calendar' : 'Add to Google Calendar'} style={{
+                                  padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
+                                  background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
+                                  textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
+                                }}>
+                                  📅 gCal
+                                  {ev.syncStatus === 'synced' && <span style={{ fontSize:'0.5rem', opacity:0.7 }}>●</span>}
+                                </a>
+                              )
+                            })()}
+                            <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                            <button onClick={()=>deleteEvent(ev.id)} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── VIEW 6: CAMPS LIBRARY ── */}
+                {plannerTab === 'camps' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Austin Summer <span style={{ color:C.sage }}>Camps 2026</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Sources: KidsOutAndAbout · Austin Chronicle · Do512 Family · AustinFunForKids
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:C.sage }}>{allCamps.length}</span>
+                          <span style={{ fontSize:'0.62rem', color:C.muted }}>camps curated</span>
+                        </div>
+                        <button onClick={()=>setCampForm({ name:'', type:'', emoji:'🏕️', ageMin:3, ageMax:12, costWk:'', driveMins:'', location:'', desc:'', color:C.sage, kids:['Monroe','Genevieve'], tags:['Custom'] })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Camp</button>
+                      </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:16 }}>
+                      {['All','Sports','Gymnastics','Dance','STEAM','Art','Swim','Outdoor','Custom'].map(f => (
+                        <button key={f} style={s.pill(campFilter===f)} onClick={()=>setCampFilter(f)}>{f}</button>
+                      ))}
+                    </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px,1fr))', gap:12 }}>
+                      {filteredCamps.map(camp => (
+                        <div key={camp.id} style={{
+                          ...s.card({ borderLeft:`3px solid ${camp.color}`, display:'flex', flexDirection:'column' })
+                        }}>
+                          <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:8 }}>
+                            <span style={{ fontSize:'1.4rem', lineHeight:1 }}>{camp.emoji}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:700, fontSize:'0.85rem', lineHeight:1.2 }}>{camp.name}</div>
+                              <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:1 }}>{camp.type}</div>
+                            </div>
+                            <div style={{ textAlign:'right' }}>
+                              <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.05rem', color:C.sage }}>${camp.costWk}</div>
+                              <div style={{ fontSize:'0.52rem', color:C.muted }}>/week</div>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize:'0.72rem', lineHeight:1.55, color:C.textSoft, marginBottom:8 }}>{camp.desc}</div>
+
+                          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:camp.color+'12', color:camp.color, fontWeight:700 }}>Ages {camp.ageMin}–{camp.ageMax}</span>
+                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:C.bg, color:C.muted }}>🚗 {camp.driveMins} min</span>
+                            {(camp.kids||[]).map(k => {
+                              const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                              return <span key={k} style={{ fontSize:'0.54rem', padding:'2px 7px', borderRadius:8, background:m?.color+'12', color:m?.color, fontWeight:600 }}>{k}</span>
+                            })}
+                          </div>
+
+                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:10 }}>📍 {camp.location}</div>
+
+                          <div style={{ marginTop:'auto', display:'flex', gap:6 }}>
+                            {(camp.kids||[]).map(k => (
+                              <button key={k} onClick={()=>{ setPlanKid(k); setPlannerTab('scenario') }} style={{
+                                flex:1, padding:'7px 8px', borderRadius:8,
+                                border:`1px solid ${FAMILY_MEMBERS.find(m=>m.name===k)?.color+'33'}`,
+                                background:FAMILY_MEMBERS.find(m=>m.name===k)?.color+'08',
+                                color:FAMILY_MEMBERS.find(m=>m.name===k)?.color,
+                                fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', fontWeight:700, cursor:'pointer'
+                              }}>+ {k}&apos;s Plan</button>
+                            ))}
+                            {camp.id.toString().startsWith('custom_') && (
+                              <>
+                                <button onClick={()=>setCampForm({...camp})} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
+                                <button onClick={()=>deleteCamp(camp.id)} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add/Edit Camp Modal */}
+                    {campForm && (
+                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <div style={{ ...s.card({ maxWidth:480, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
+                            {campForm.id ? 'Edit Camp' : 'Add New Camp'}
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            {[['name','Camp Name','text'],['emoji','Emoji','text'],['type','Type (e.g. Sports)','text'],['location','Location','text'],['desc','Description','text']].map(([field,label]) => (
+                              <div key={field}>
+                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
+                                <input value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
+                              </div>
+                            ))}
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                              {[['costWk','$/week'],['driveMins','Drive min'],['ageMin','Age min'],['ageMax','Age max']].map(([field,label]) => (
+                                <div key={field}>
+                                  <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
+                                  <input type="number" value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
+                                </div>
+                              ))}
+                            </div>
+                            <div>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Kids</div>
+                              <div style={{ display:'flex', gap:6 }}>
+                                {['Monroe','Genevieve','Anastasia'].map(k => {
+                                  const sel = (campForm.kids||[]).includes(k)
+                                  const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
+                                  return (
+                                    <button key={k} onClick={()=>setCampForm(p=>({...p,kids:sel?p.kids.filter(x=>x!==k):[...(p.kids||[]),k]}))} style={s.pill(sel, m?.color)}>{k}</button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                            <button onClick={()=>saveCamp(campForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
+                            <button onClick={()=>setCampForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── VIEW 7: SCENARIO BUILDER ── */}
                 {plannerTab === 'scenario' && (
                   <div>
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18 }}>
@@ -1023,268 +1758,7 @@ export default function BrockFamilyHub() {
                   </div>
                 )}
 
-                {/* ── CAMPS SUBMODULE ── */}
-                {plannerTab === 'camps' && (
-                  <div>
-                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
-                      <div>
-                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
-                          Austin Summer <span style={{ color:C.sage }}>Camps 2026</span>
-                        </div>
-                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
-                          Sources: KidsOutAndAbout · Austin Chronicle · Do512 Family · AustinFunForKids
-                        </div>
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:C.sage }}>{allCamps.length}</span>
-                          <span style={{ fontSize:'0.62rem', color:C.muted }}>camps curated</span>
-                        </div>
-                        <button onClick={()=>setCampForm({ name:'', type:'', emoji:'🏕️', ageMin:3, ageMax:12, costWk:'', driveMins:'', location:'', desc:'', color:C.sage, kids:['Monroe','Genevieve'], tags:['Custom'] })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Camp</button>
-                      </div>
-                    </div>
-
-                    {/* Filters */}
-                    <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:16 }}>
-                      {['All','Sports','Gymnastics','Dance','STEAM','Art','Swim','Outdoor','Custom'].map(f => (
-                        <button key={f} style={s.pill(campFilter===f)} onClick={()=>setCampFilter(f)}>{f}</button>
-                      ))}
-                    </div>
-
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px,1fr))', gap:12 }}>
-                      {filteredCamps.map(camp => (
-                        <div key={camp.id} style={{
-                          ...s.card({ borderLeft:`3px solid ${camp.color}`, display:'flex', flexDirection:'column' })
-                        }}>
-                          <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:8 }}>
-                            <span style={{ fontSize:'1.4rem', lineHeight:1 }}>{camp.emoji}</span>
-                            <div style={{ flex:1 }}>
-                              <div style={{ fontWeight:700, fontSize:'0.85rem', lineHeight:1.2 }}>{camp.name}</div>
-                              <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:1 }}>{camp.type}</div>
-                            </div>
-                            <div style={{ textAlign:'right' }}>
-                              <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.05rem', color:C.sage }}>${camp.costWk}</div>
-                              <div style={{ fontSize:'0.52rem', color:C.muted }}>/week</div>
-                            </div>
-                          </div>
-
-                          <div style={{ fontSize:'0.72rem', lineHeight:1.55, color:C.textSoft, marginBottom:8 }}>{camp.desc}</div>
-
-                          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
-                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:camp.color+'12', color:camp.color, fontWeight:700 }}>Ages {camp.ageMin}–{camp.ageMax}</span>
-                            <span style={{ fontSize:'0.56rem', padding:'2px 8px', borderRadius:8, background:C.bg, color:C.muted }}>🚗 {camp.driveMins} min</span>
-                            {(camp.kids||[]).map(k => {
-                              const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                              return <span key={k} style={{ fontSize:'0.54rem', padding:'2px 7px', borderRadius:8, background:m?.color+'12', color:m?.color, fontWeight:600 }}>{k}</span>
-                            })}
-                          </div>
-
-                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:10 }}>📍 {camp.location}</div>
-
-                          <div style={{ marginTop:'auto', display:'flex', gap:6 }}>
-                            {(camp.kids||[]).map(k => (
-                              <button key={k} onClick={()=>{setPlanKid(k);setPlannerTab('scenario')}} style={{
-                                flex:1, padding:'7px 8px', borderRadius:8,
-                                border:`1px solid ${FAMILY_MEMBERS.find(m=>m.name===k)?.color+'33'}`,
-                                background:FAMILY_MEMBERS.find(m=>m.name===k)?.color+'08',
-                                color:FAMILY_MEMBERS.find(m=>m.name===k)?.color,
-                                fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', fontWeight:700, cursor:'pointer'
-                              }}>+ {k}'s Plan</button>
-                            ))}
-                            {camp.id.toString().startsWith('custom_') && (
-                              <>
-                                <button onClick={()=>setCampForm({...camp})} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
-                                <button onClick={()=>deleteCamp(camp.id)} style={{ padding:'7px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add/Edit Camp Modal */}
-                    {campForm && (
-                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                        <div style={{ ...s.card({ maxWidth:480, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
-                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
-                            {campForm.id ? 'Edit Camp' : 'Add New Camp'}
-                          </div>
-                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                            {[['name','Camp Name','text'],['emoji','Emoji','text'],['type','Type (e.g. Sports)','text'],['location','Location','text'],['desc','Description','text']].map(([field,label,type]) => (
-                              <div key={field}>
-                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
-                                <input value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
-                              </div>
-                            ))}
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                              {[['costWk','$/week'],['driveMins','Drive min'],['ageMin','Age min'],['ageMax','Age max']].map(([field,label]) => (
-                                <div key={field}>
-                                  <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>{label}</div>
-                                  <input type="number" value={campForm[field]||''} onChange={e=>setCampForm(p=>({...p,[field]:e.target.value}))} style={{ ...s.input }} placeholder={label} />
-                                </div>
-                              ))}
-                            </div>
-                            <div>
-                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Kids</div>
-                              <div style={{ display:'flex', gap:6 }}>
-                                {['Monroe','Genevieve','Anastasia'].map(k => {
-                                  const sel = (campForm.kids||[]).includes(k)
-                                  const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                                  return (
-                                    <button key={k} onClick={()=>setCampForm(p=>({...p,kids:sel?p.kids.filter(x=>x!==k):[...(p.kids||[]),k]}))} style={s.pill(sel, m?.color)}>{k}</button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', gap:8, marginTop:18 }}>
-                            <button onClick={()=>saveCamp(campForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
-                            <button onClick={()=>setCampForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── EVENTS SUBMODULE ── */}
-                {plannerTab === 'events' && (
-                  <div>
-                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
-                      <div>
-                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
-                          Family <span style={{ color:C.sage }}>Events</span>
-                        </div>
-                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
-                          Manage family events · Add to Google Calendar · CRUD supported
-                        </div>
-                      </div>
-                      <button onClick={()=>setEventForm({ title:'', date:'', time:'', location:'', description:'', color:C.sage })} style={{ ...s.btn(), fontSize:'0.65rem', padding:'7px 14px' }}>+ Add Event</button>
-                    </div>
-
-                    {sortedEvents.length === 0 && (
-                      <div style={{ ...s.card({ textAlign:'center', padding:'40px 20px', color:C.muted }) }}>
-                        <div style={{ fontSize:'2rem', marginBottom:8 }}>📆</div>
-                        <div style={{ fontSize:'0.8rem' }}>No events yet. Add your first family event!</div>
-                      </div>
-                    )}
-
-                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                      {sortedEvents.map(ev => (
-                        <div key={ev.id} style={{ ...s.card({ borderLeft:`4px solid ${ev.color||C.sage}`, display:'flex', alignItems:'flex-start', gap:14 }) }}>
-                          <div style={{ minWidth:54, textAlign:'center' }}>
-                            {ev.date ? (
-                              <>
-                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.5rem', lineHeight:1, color:ev.color||C.sage }}>{new Date(ev.date+'T12:00:00').getDate()}</div>
-                                <div style={{ fontSize:'0.55rem', textTransform:'uppercase', letterSpacing:'0.1em', color:C.muted }}>
-                                  {MONTH_FULL[new Date(ev.date+'T12:00:00').getMonth()]?.slice(0,3)}
-                                </div>
-                              </>
-                            ) : <div style={{ fontSize:'0.65rem', color:C.muted }}>TBD</div>}
-                          </div>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontWeight:700, fontSize:'0.9rem', marginBottom:3 }}>{ev.title}</div>
-                            <div style={{ display:'flex', gap:12, fontSize:'0.65rem', color:C.muted, flexWrap:'wrap', marginBottom:ev.description?6:0 }}>
-                              {ev.time && <span>🕐 {ev.time}</span>}
-                              {ev.location && <span>📍 {ev.location}</span>}
-                            </div>
-                            {ev.description && <div style={{ fontSize:'0.72rem', color:C.textSoft, lineHeight:1.5 }}>{ev.description}</div>}
-                          </div>
-                          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                            {(() => {
-                              // When synced, link directly to the event; otherwise use template URL
-                              const eid = ev.gcalEventId
-                                ? btoa([ev.gcalEventId, ev.gcalCalendarId].filter(Boolean).join(' '))
-                                : null
-                              const gcalUrl = eid
-                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
-                                : buildGCalUrl(ev)
-                              return (
-                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title={eid ? 'Open in Google Calendar' : 'Add to Google Calendar'} style={{
-                                  padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
-                                  background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
-                                  textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
-                                }}>
-                                  📅 gCal
-                                  {ev.syncStatus === 'synced' && <span style={{ fontSize:'0.5rem', opacity:0.7 }}>●</span>}
-                                </a>
-                              )
-                            })()}
-                            <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
-                            <button onClick={()=>deleteEvent(ev.id)} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add/Edit Event Modal */}
-                    {eventForm && (
-                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                        <div style={{ ...s.card({ maxWidth:460, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
-                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
-                            {eventForm.id ? 'Edit Event' : 'New Event'}
-                          </div>
-                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                            <div>
-                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Event Title *</div>
-                              <input value={eventForm.title||''} onChange={e=>setEventForm(p=>({...p,title:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Monroe T-ball" />
-                            </div>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                              <div>
-                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Date</div>
-                                <input type="date" value={eventForm.date||''} onChange={e=>setEventForm(p=>({...p,date:e.target.value}))} style={{ ...s.input }} />
-                              </div>
-                              <div>
-                                <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Time (optional)</div>
-                                <input type="time" value={eventForm.time||''} onChange={e=>setEventForm(p=>({...p,time:e.target.value}))} style={{ ...s.input }} />
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Location</div>
-                              <input value={eventForm.location||''} onChange={e=>setEventForm(p=>({...p,location:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Zilker Park" />
-                            </div>
-                            <div>
-                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Notes / Description</div>
-                              <input value={eventForm.description||''} onChange={e=>setEventForm(p=>({...p,description:e.target.value}))} style={{ ...s.input }} placeholder="Any details…" />
-                            </div>
-                            <div>
-                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Color</div>
-                              <div style={{ display:'flex', gap:8 }}>
-                                {[C.sage,C.sky,C.stone,C.rose,C.lavender].map(col => (
-                                  <button key={col} onClick={()=>setEventForm(p=>({...p,color:col}))} style={{
-                                    width:24, height:24, borderRadius:'50%', background:col, border:eventForm.color===col?`2px solid ${C.text}`:'2px solid transparent', cursor:'pointer'
-                                  }} />
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', gap:8, marginTop:18 }}>
-                            <button onClick={()=>saveEvent(eventForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
-                            {eventForm.id && (() => {
-                              const eid = eventForm.gcalEventId
-                                ? btoa([eventForm.gcalEventId, eventForm.gcalCalendarId].filter(Boolean).join(' '))
-                                : null
-                              const gcalUrl = eid
-                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
-                                : buildGCalUrl(eventForm)
-                              return (
-                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" style={{
-                                  flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.sage}44`,
-                                  background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
-                                  fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
-                                  display:'flex', alignItems:'center', justifyContent:'center', gap:4
-                                }}>📅 {eid ? 'Open in gCal' : 'Add to gCal'}</a>
-                              )
-                            })()}
-                            <button onClick={()=>setEventForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── SYNC SETTINGS ── */}
+                {/* ── VIEW 7: SYNC SETTINGS ── */}
                 {plannerTab === 'sync' && (
                   <div>
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
@@ -1342,13 +1816,13 @@ export default function BrockFamilyHub() {
                           Map each family member to their Google Calendar. Events created for that person will sync to that calendar.
                         </div>
                         {[
-                          { id:'bakari', name:'Bakari', color:C.bakari },
-                          { id:'jenya', name:'Jenya', color:C.jenya },
-                          { id:'monroe', name:'Monroe', color:C.monroe },
+                          { id:'bakari',    name:'Bakari',    color:C.bakari },
+                          { id:'jenya',     name:'Jenya',     color:C.jenya },
+                          { id:'monroe',    name:'Monroe',    color:C.monroe },
                           { id:'genevieve', name:'Genevieve', color:C.genevieve },
                           { id:'anastasia', name:'Anastasia', color:C.anastasia },
-                          { id:'family', name:'Family', color:C.family },
-                          { id:'tanya', name:'Tanya', color:C.stone },
+                          { id:'family',    name:'Family',    color:C.family },
+                          { id:'tanya',     name:'Tanya',     color:C.stone },
                         ].map(member => (
                           <div key={member.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 0', borderBottom:`1px solid ${C.border}` }}>
                             <span style={{ width:10, height:10, borderRadius:'50%', background:member.color, flexShrink:0, display:'inline-block' }}/>
@@ -1412,6 +1886,71 @@ export default function BrockFamilyHub() {
                 )}
 
               </div>
+
+              {/* ── SHARED EVENT FORM MODAL (planner-wide) ── */}
+              {eventForm && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ ...s.card({ maxWidth:460, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
+                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:16 }}>
+                      {eventForm.id ? 'Edit Event' : 'New Event'}
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      <div>
+                        <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Event Title *</div>
+                        <input value={eventForm.title||''} onChange={e=>setEventForm(p=>({...p,title:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Monroe T-ball" />
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                        <div>
+                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Date</div>
+                          <input type="date" value={eventForm.date||''} onChange={e=>setEventForm(p=>({...p,date:e.target.value}))} style={{ ...s.input }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Time (optional)</div>
+                          <input type="time" value={eventForm.time||''} onChange={e=>setEventForm(p=>({...p,time:e.target.value}))} style={{ ...s.input }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Location</div>
+                        <input value={eventForm.location||''} onChange={e=>setEventForm(p=>({...p,location:e.target.value}))} style={{ ...s.input }} placeholder="e.g. Zilker Park" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:3 }}>Notes / Description</div>
+                        <input value={eventForm.description||''} onChange={e=>setEventForm(p=>({...p,description:e.target.value}))} style={{ ...s.input }} placeholder="Any details…" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:6 }}>Color</div>
+                        <div style={{ display:'flex', gap:8 }}>
+                          {[C.sage,C.sky,C.stone,C.rose,C.lavender].map(col => (
+                            <button key={col} onClick={()=>setEventForm(p=>({...p,color:col}))} style={{
+                              width:24, height:24, borderRadius:'50%', background:col, border:eventForm.color===col?`2px solid ${C.text}`:'2px solid transparent', cursor:'pointer'
+                            }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, marginTop:18 }}>
+                      <button onClick={()=>saveEvent(eventForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
+                      {eventForm.id && (() => {
+                        const eid = eventForm.gcalEventId
+                          ? btoa([eventForm.gcalEventId, eventForm.gcalCalendarId].filter(Boolean).join(' '))
+                          : null
+                        const gcalUrl = eid
+                          ? `https://calendar.google.com/calendar/event?eid=${eid}`
+                          : buildGCalUrl(eventForm)
+                        return (
+                          <a href={gcalUrl} target="_blank" rel="noopener noreferrer" style={{
+                            flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.sage}44`,
+                            background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
+                            fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
+                            display:'flex', alignItems:'center', justifyContent:'center', gap:4
+                          }}>📅 {eid ? 'Open in gCal' : 'Add to gCal'}</a>
+                        )
+                      })()}
+                      <button onClick={()=>setEventForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

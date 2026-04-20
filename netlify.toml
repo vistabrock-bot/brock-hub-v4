@@ -8,6 +8,11 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# ─── Discover edge function ───────────────────────────────────────────────────
+[[edge_functions]]
+  path = "/api/discover"
+  function = "discover"
+
 # ─── Google Auth edge function ────────────────────────────────────────────────
 [[edge_functions]]
   path = "/api/google/auth/start"
@@ -41,4 +46,3 @@
 [[edge_functions]]
   path = "/api/calendar/events/*"
   function = "calendar-sync"
- 
