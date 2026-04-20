@@ -99,6 +99,9 @@ const SUMMER_WEEKS = [
   { wk:11, start:'Aug 10', end:'Aug 14' },
 ]
 
+const SUMMER_BUDGET = 12000
+const BUDGET_WARNING_THRESHOLD = 0.9 // warn when camp cost exceeds 90% of budget
+
 const CAMPS = [
   { id:'kidventure', name:'Kidventure Discoverers', type:'Multi-Activity', emoji:'🌟',
     ageMin:3, ageMax:5, costWk:370, fullDay:true,
@@ -601,6 +604,9 @@ export default function BrockFamilyHub() {
   const [schedule, setSchedule] = useState({})
   const [planKid, setPlanKid]   = useState('Monroe')
   const [campFilter, setCampFilter] = useState('All')
+  const [offweeks, setOffweeks] = useState({}) // { 'Monroe-1': 'Family time', ... }
+  const [assignModal, setAssignModal] = useState(null) // { kid, wk } | null
+  const [scenarioToast, setScenarioToast] = useState(null) // { message, undoFn } | null
 
   // Custom Camps (persisted)
   const [customCamps, setCustomCamps] = useState([])
@@ -641,6 +647,8 @@ export default function BrockFamilyHub() {
   const [aiInput, setAiInput]   = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const chatRef = useRef(null)
+  const weekCardRefs = useRef({})
+  const toastTimerRef = useRef(null)
   const ru = lang === 'ru'
 
   // Discover / Weekend state
@@ -656,6 +664,7 @@ export default function BrockFamilyHub() {
   // Hydrate from localStorage on mount
   useEffect(() => {
     setSchedule(loadLS('schedule', {}))
+    setOffweeks(loadLS('offweeks', {}))
     setPlannerTab(loadLS('plannerTab', 'this-weekend'))
     setTasks(loadLS('tasks', [
       { id:1, text:"Register Monroe for Kidventure Week 1", done:false, who:'Bakari', ts:Date.now()-86400000 },
@@ -689,6 +698,7 @@ export default function BrockFamilyHub() {
 
   // Persist on change
   useEffect(() => { if(mounted) saveLS('schedule', schedule) }, [schedule, mounted])
+  useEffect(() => { if(mounted) saveLS('offweeks', offweeks) }, [offweeks, mounted])
   useEffect(() => { if(mounted) saveLS('plannerTab', plannerTab) }, [plannerTab, mounted])
   useEffect(() => { if(mounted) saveLS('tasks', tasks) }, [tasks, mounted])
   useEffect(() => { if(mounted) saveLS('notes', notes) }, [notes, mounted])
@@ -705,6 +715,27 @@ export default function BrockFamilyHub() {
         .catch(() => {})
     }
   }, [plannerTab, gcal.connected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Escape closes assign modal
+  useEffect(() => {
+    if (!assignModal) return
+    const handler = (e) => { if (e.key === 'Escape') setAssignModal(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [assignModal])
+
+  // Ctrl/Cmd+Z triggers undo on scenario toast
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && scenarioToast?.undoFn) {
+        scenarioToast.undoFn()
+        setScenarioToast(null)
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [scenarioToast])
 
   // Clock
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
@@ -830,6 +861,26 @@ export default function BrockFamilyHub() {
   const totalCost = kidCost('Monroe') + kidCost('Genevieve')
   const weeksPlanned = kid => Object.keys(schedule).filter(k=>k.startsWith(`${kid}-`)).length
   const filteredCamps = campFilter === 'All' ? allCamps : allCamps.filter(c => c.tags.includes(campFilter) || c.type === campFilter)
+
+  // Offweek helpers
+  const getWeekOffweek = (kid, wk) => offweeks[`${kid}-${wk}`] || null
+  const setWeekOffweek = (kid, wk, label) => {
+    setSchedule(p => Object.fromEntries(Object.entries(p).filter(([k]) => k !== `${kid}-${wk}`)))
+    setOffweeks(p => ({ ...p, [`${kid}-${wk}`]: label }))
+  }
+  const clearWeekAll = (kid, wk) => {
+    setSchedule(p => Object.fromEntries(Object.entries(p).filter(([k]) => k !== `${kid}-${wk}`)))
+    setOffweeks(p => Object.fromEntries(Object.entries(p).filter(([k]) => k !== `${kid}-${wk}`)))
+  }
+
+  // Toast helper
+  const TOAST_DURATION_MS = 4000
+  const FOCUS_DELAY_MS    = 50
+  const showScenarioToast = (message, undoFn) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setScenarioToast({ message, undoFn })
+    toastTimerRef.current = setTimeout(() => setScenarioToast(null), TOAST_DURATION_MS)
+  }
 
   // Custom camp CRUD helpers
   const saveCamp = (form) => {
@@ -1941,6 +1992,7 @@ export default function BrockFamilyHub() {
                       {kbAnnounce}
                     </div>
 
+                    {/* ── Header ── */}
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18 }}>
                       <div>
                         <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
@@ -1963,17 +2015,76 @@ export default function BrockFamilyHub() {
                         })}
                         <div style={{ ...s.card({ textAlign:'center', minWidth:100, borderColor:C.sage+'44', background:C.sageBg }) }}>
                           <div style={{ fontSize:'0.55rem', letterSpacing:'0.1em', textTransform:'uppercase', color:C.sage, marginBottom:3, fontWeight:700 }}>Total</div>
-                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:C.sage }}>${totalCost.toLocaleString()}</div>
-                          <div style={{ fontSize:'0.56rem', color:C.muted }}>summer budget</div>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem', color:totalCost > SUMMER_BUDGET ? C.rose : C.sage }}>${totalCost.toLocaleString()}</div>
+                          <div style={{ fontSize:'0.56rem', color:C.muted }}>of ${SUMMER_BUDGET.toLocaleString()}</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Kid selector */}
+                    {/* ── Summary strip ── */}
+                    {(() => {
+                      const assignedCount = SUMMER_WEEKS.filter(w => getWeekCamp(planKid, w.wk)).length
+                      const offweekCount  = SUMMER_WEEKS.filter(w => getWeekOffweek(planKid, w.wk)).length
+                      const gapCount      = SUMMER_WEEKS.filter(w => !getWeekCamp(planKid, w.wk) && !getWeekOffweek(planKid, w.wk)).length
+                      const kidWeekCost   = SUMMER_WEEKS.reduce((acc, w) => acc + (getWeekCamp(planKid, w.wk)?.costWk || 0), 0)
+                      const assignedWeeks = SUMMER_WEEKS.filter(w => getWeekCamp(planKid, w.wk))
+                      const avgDrive      = assignedWeeks.length ? Math.round(assignedWeeks.reduce((acc, w) => acc + (getWeekCamp(planKid, w.wk)?.driveMins || 0), 0) / assignedWeeks.length) : 0
+                      const covered       = assignedCount + offweekCount
+                      return (
+                        <div style={{ ...s.card({ padding:'12px 18px', marginBottom:14, display:'flex', alignItems:'center', gap:24, flexWrap:'wrap' }) }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <div>
+                              <div style={{ fontSize:'0.58rem', color:C.muted, marginBottom:2 }}>Coverage</div>
+                              <div style={{ fontSize:'0.82rem', fontWeight:700, color:C.text }}>
+                                {covered}/11 <span style={{ fontWeight:400, color:C.muted, fontSize:'0.68rem' }}>weeks</span>
+                              </div>
+                            </div>
+                            <div style={{ width:72, height:6, borderRadius:4, background:C.border, overflow:'hidden' }}>
+                              <div style={{ height:'100%', width:`${(covered/11)*100}%`, background:C.sage, borderRadius:4, transition:'width 0.3s' }} />
+                            </div>
+                          </div>
+                          <div style={{ width:1, height:32, background:C.border }} />
+                          <div>
+                            <div style={{ fontSize:'0.58rem', color:C.muted, marginBottom:2 }}>Camp cost</div>
+                            <div style={{ fontSize:'0.82rem', fontWeight:700, color:kidWeekCost > SUMMER_BUDGET * BUDGET_WARNING_THRESHOLD ? C.rose : C.sage }}>
+                              ${kidWeekCost.toLocaleString()} <span style={{ fontWeight:400, color:C.muted, fontSize:'0.68rem' }}>of ${SUMMER_BUDGET.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <div style={{ width:1, height:32, background:C.border }} />
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <div>
+                              <div style={{ fontSize:'0.58rem', color:C.muted, marginBottom:2 }}>Gaps</div>
+                              <div style={{ fontSize:'0.82rem', fontWeight:700, color:C.text }}>
+                                {gapCount} <span style={{ fontWeight:400, color:C.muted, fontSize:'0.68rem' }}>unassigned</span>
+                              </div>
+                            </div>
+                            {gapCount > 0 && (
+                              <span style={{ background:C.rose+'20', color:C.rose, padding:'2px 8px', borderRadius:12, fontSize:'0.6rem', fontWeight:700 }}>
+                                {gapCount} gap{gapCount !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ width:1, height:32, background:C.border }} />
+                          <div>
+                            <div style={{ fontSize:'0.58rem', color:C.muted, marginBottom:2 }}>Avg drive</div>
+                            <div style={{ fontSize:'0.82rem', fontWeight:700, color:C.text }}>
+                              {avgDrive > 0 ? `${avgDrive} min` : '—'} <span style={{ fontWeight:400, color:C.muted, fontSize:'0.68rem' }}>one-way</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* ── Kid switcher ── */}
                     <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
                       {['Monroe','Genevieve'].map(k => {
                         const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
-                        return <button key={k} style={s.pill(planKid===k, m?.color)} onClick={()=>setPlanKid(k)}>{m?.emoji} {k}</button>
+                        const kCovered = SUMMER_WEEKS.filter(w => getWeekCamp(k, w.wk) || getWeekOffweek(k, w.wk)).length
+                        return (
+                          <button key={k} style={s.pill(planKid===k, m?.color)} onClick={()=>setPlanKid(k)}>
+                            {m?.emoji} {k} · {kCovered}/11
+                          </button>
+                        )
                       })}
                       <span style={{ fontSize:'0.62rem', color:C.muted, alignSelf:'center', marginLeft:8 }}>
                         {kbPickup
@@ -2014,29 +2125,47 @@ export default function BrockFamilyHub() {
                       })}
                     </div>
 
-                    {/* Week grid — pointer handlers attached here for delegation */}
+                    {/* ── Week grid ── */}
                     <div
                       {...dndHandlers}
                       style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(210px,1fr))', gap:10, marginBottom:12, position:'relative', touchAction: dragState.isDragging ? 'none' : 'auto', userSelect: dragState.isDragging ? 'none' : 'auto' }}
                     >
                       {SUMMER_WEEKS.map(week => {
-                        const weekKey = `${planKid}-${week.wk}`
-                        const assigned = getWeekCamp(planKid, week.wk)
-                        const eligible = allCamps.filter(c => (c.kids||[]).includes(planKid) && (c.weeks||[]).includes(week.wk))
-                        const isJul4 = week.wk === 5
-                        const isOver = dragState.overTarget === week.wk
-                        const isValidOver = isOver && dragState.isValidDrop
-                        const isInvalidOver = isOver && !dragState.isValidDrop
-                        const isSource = dragState.sourceType === 'week' && dragState.sourceId === weekKey
-                        const isKbSrc = kbPickup?.sourceType === 'week' && kbPickup?.sourceId === weekKey
-                        const isKbTarget = !!kbPickup && !isKbSrc
-                        const pulsing = pulsingWk === week.wk
-                        // Build aria-label in readable parts
-                        const wkBaseLabel = `Week ${week.wk}, ${week.start}–${week.end}, ${assigned ? `${assigned.name} assigned` : 'unassigned'}`
-                        const wkActionLabel = kbPickup ? '. Press Space to drop here' : (assigned ? '. Press Space to pick up' : '')
+                        const weekKey      = `${planKid}-${week.wk}`
+                        const assigned     = getWeekCamp(planKid, week.wk)
+                        const offweekLabel = getWeekOffweek(planKid, week.wk)
+                        const eligible     = allCamps.filter(c => (c.kids||[]).includes(planKid) && (c.weeks||[]).includes(week.wk))
+                        const isJul4       = week.wk === 5
+                        const oneClick     = eligible.length === 1 && !assigned && !offweekLabel
+                        const isOver       = dragState.overTarget === week.wk
+                        const isValidOver  = isOver && dragState.isValidDrop
+                        const isInvalidOver= isOver && !dragState.isValidDrop
+                        const isSource     = dragState.sourceType === 'week' && dragState.sourceId === weekKey
+                        const isKbSrc      = kbPickup?.sourceType === 'week' && kbPickup?.sourceId === weekKey
+                        const isKbTarget   = !!kbPickup && !isKbSrc
+                        const pulsing      = pulsingWk === week.wk
+                        const wkBaseLabel  = `Week ${week.wk}, ${week.start}–${week.end}, ${assigned ? `${assigned.name} assigned` : offweekLabel ? offweekLabel : 'unassigned'}`
+                        const wkActionLabel= kbPickup ? '. Press Space to drop here' : (assigned ? '. Press Space to pick up and drag' : '')
+
+                        const handleCardClick = () => {
+                          if (dragState.isDragging) return
+                          if (oneClick) {
+                            const camp = eligible[0]
+                            const prevSchedule = { ...schedule }
+                            setWeekCamp(planKid, week.wk, camp.id)
+                            showScenarioToast(
+                              `Assigned Week ${week.wk} to ${camp.name}`,
+                              () => setSchedule(prevSchedule)
+                            )
+                          } else {
+                            setAssignModal({ kid: planKid, wk: week.wk })
+                          }
+                        }
+
                         return (
                           <div
                             key={week.wk}
+                            ref={el => { weekCardRefs.current[`${planKid}-${week.wk}`] = el }}
                             data-drag-source={assigned ? 'week' : undefined}
                             data-week-key={assigned ? weekKey : undefined}
                             data-drop-target="week"
@@ -2044,65 +2173,108 @@ export default function BrockFamilyHub() {
                             role="button"
                             tabIndex={0}
                             aria-label={`${wkBaseLabel}${wkActionLabel}`}
-                            onKeyDown={(e) => handleWeekKeyDown(e, weekKey)}
+                            onClick={handleCardClick}
+                            onKeyDown={(e) => {
+                              if (kbPickup) { handleWeekKeyDown(e, weekKey); return }
+                              if (e.key === 'Enter') { e.preventDefault(); handleCardClick() }
+                              else handleWeekKeyDown(e, weekKey)
+                            }}
                             style={{
                               ...s.card({
-                                minHeight:130,
+                                minHeight:120,
                                 borderColor: isInvalidOver ? C.rose
-                                           : isValidOver ? C.sage
-                                           : isKbSrc ? C.sage+'88'
-                                           : assigned ? assigned.color+'55' : C.border,
+                                           : isValidOver   ? C.sage
+                                           : isKbSrc       ? C.sage+'88'
+                                           : assigned      ? assigned.color+'55'
+                                           : C.border,
                                 borderWidth: (isOver || isKbSrc) ? 2 : 1,
-                                background: isValidOver ? C.sageBg
+                                background: isValidOver   ? C.sageBg
                                           : isInvalidOver ? C.roseBg
-                                          : assigned ? assigned.color+'08' : C.card,
+                                          : assigned      ? assigned.color+'08'
+                                          : offweekLabel  ? C.bgWarm
+                                          : C.card,
                                 position:'relative',
                                 cursor: dragState.isDragging
                                   ? (isOver ? (dragState.isValidDrop ? 'copy' : 'not-allowed') : 'default')
-                                  : kbPickup ? 'pointer' : 'default',
+                                  : kbPickup ? 'pointer' : 'pointer',
+                                border: !assigned && !offweekLabel && !isOver && !isKbSrc
+                                  ? `1.5px dashed ${C.borderMed}`
+                                  : undefined,
                                 opacity: isSource ? 0.4 : 1,
                                 transform: isSource ? 'scale(0.97)' : 'scale(1)',
                                 boxShadow: isValidOver ? '0 4px 16px rgba(124,154,130,0.2)' : C.shadow,
                                 transition:'all 0.15s',
                                 animation: pulsing ? `dndPulse ${PULSE_ANIMATION_DURATION_MS}ms ease-out` : 'none',
                                 outline: isKbTarget ? `1px dashed ${C.sage}66` : 'none', outlineOffset:-2,
-                              }),
+                                userSelect:'none',
+                              })
                             }}
                           >
-                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                              <div>
-                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:assigned?assigned.color:C.muted }}>W{week.wk}</div>
-                                <div style={{ fontSize:'0.56rem', color:C.muted }}>{week.start}–{week.end}</div>
-                              </div>
-                              <div style={{ display:'flex', alignItems:'flex-start', gap:4 }}>
-                                {isJul4 && <span style={{ fontSize:'0.56rem', color:C.stone }}>🎆 Jul 4</span>}
-                                {isTouchDevice && assigned && <span style={{ fontSize:'0.55rem', color:C.muted, opacity:0.5 }}>⋮⋮</span>}
-                              </div>
-                            </div>
-                            {assigned ? (
-                              <div>
-                                <div style={{ fontSize:'0.75rem', fontWeight:700, color:assigned.color, lineHeight:1.2, marginBottom:4 }}>{assigned.emoji} {assigned.name}</div>
-                                <div style={{ fontSize:'0.6rem', color:C.muted }}>${assigned.costWk}/wk · {assigned.driveMins} min</div>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setWeekCamp(planKid,week.wk,null) }}
-                                  aria-label={`Remove ${assigned.name} from Week ${week.wk}`}
-                                  style={{ position:'absolute', top:8, right:8, background:C.bg, border:`1px solid ${C.border}`, color:C.muted, borderRadius:6, padding:'2px 7px', fontSize:'0.58rem', cursor:'pointer' }}
-                                >✕</button>
-                              </div>
-                            ) : (
-                              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                                {eligible.slice(0,3).map(c => (
-                                  <button key={c.id} onClick={()=>setWeekCamp(planKid,week.wk,c.id)} style={{
-                                    padding:'4px 8px', borderRadius:7, border:`1px solid ${c.color}33`,
-                                    background:c.color+'0a', color:c.color, fontFamily:"'Outfit',sans-serif",
-                                    fontSize:'0.6rem', fontWeight:600, cursor:'pointer', textAlign:'left',
-                                    transition:'all 0.12s'
-                                  }}>
-                                    {c.emoji} {c.name.split(' ').slice(0,2).join(' ')} — ${c.costWk}
-                                  </button>
-                                ))}
-                              </div>
+                            {/* Jul 4 ribbon */}
+                            {isJul4 && (
+                              <div style={{
+                                position:'absolute', top:0, left:0, right:0,
+                                background:`linear-gradient(90deg, ${C.stone}, ${C.stone}bb)`,
+                                color:'#fff', fontSize:'0.58rem', fontWeight:700,
+                                padding:'3px 10px', borderRadius:'13px 13px 0 0',
+                                textAlign:'center', letterSpacing:'0.08em',
+                              }}>🎆 Independence Day Week</div>
                             )}
+
+                            <div style={{ paddingTop: isJul4 ? 20 : 0 }}>
+                              {/* Date first, week number second */}
+                              <div style={{ marginBottom:8 }}>
+                                <div style={{
+                                  fontFamily:"'DM Serif Display',serif",
+                                  fontSize:'1rem',
+                                  color: assigned ? assigned.color : offweekLabel ? C.dim : C.text,
+                                  lineHeight:1.1,
+                                }}>{week.start}–{week.end}</div>
+                                <div style={{ fontSize:'0.56rem', color:C.muted, marginTop:1 }}>Week {week.wk}</div>
+                              </div>
+
+                              {assigned ? (
+                                /* Assigned state */
+                                <div>
+                                  <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:5 }}>
+                                    <span style={{ width:9, height:9, borderRadius:'50%', background:assigned.color, flexShrink:0, display:'inline-block' }} />
+                                    <span style={{
+                                      fontSize:'0.72rem', fontWeight:700, color:assigned.color,
+                                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130,
+                                    }}>{assigned.name}</span>
+                                    {isTouchDevice && <span style={{ fontSize:'0.45rem', color:C.muted, opacity:0.5, marginLeft:'auto' }}>⋮⋮</span>}
+                                  </div>
+                                  <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                                    <span style={{ background:assigned.color+'18', color:assigned.color, padding:'2px 7px', borderRadius:8, fontSize:'0.58rem', fontWeight:600 }}>
+                                      {assigned.fullDay ? 'Full day' : '½ day'}
+                                    </span>
+                                    <span style={{ background:C.bg, color:C.muted, padding:'2px 7px', borderRadius:8, fontSize:'0.58rem', border:`1px solid ${C.border}` }}>
+                                      🚗 {assigned.driveMins}m
+                                    </span>
+                                    <span style={{ background:C.bg, color:C.sage, padding:'2px 7px', borderRadius:8, fontSize:'0.58rem', border:`1px solid ${C.border}`, fontWeight:600 }}>
+                                      ${assigned.costWk}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : offweekLabel ? (
+                                /* Offweek state */
+                                <div style={{ display:'flex', alignItems:'center', gap:8, color:C.muted }}>
+                                  <span style={{ fontSize:'1rem' }}>
+                                    {offweekLabel === 'Travel' ? '✈️' : offweekLabel === 'PTO' ? '💼' : '🏡'}
+                                  </span>
+                                  <span style={{ fontSize:'0.68rem', fontWeight:600 }}>{offweekLabel}</span>
+                                </div>
+                              ) : (
+                                /* Unassigned state */
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', paddingTop:4 }}>
+                                  <span style={{ fontSize:'0.68rem', color:C.muted, fontWeight:500 }}>
+                                    {oneClick
+                                      ? `+ Assign ${eligible[0].name.split(' ').slice(0,2).join(' ')}`
+                                      : '+ Assign camp'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )
                       })}
@@ -2125,7 +2297,7 @@ export default function BrockFamilyHub() {
                       🗑️ Drop to remove
                     </div>
 
-                    {/* Summary */}
+                    {/* ── Schedule Summary ── */}
                     {Object.keys(schedule).length > 0 && (
                       <div style={{ ...s.card({ borderColor:C.sage+'33' }), marginBottom:16 }}>
                         <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.15rem', marginBottom:12 }}>Schedule Summary</div>
@@ -2159,7 +2331,199 @@ export default function BrockFamilyHub() {
                       </div>
                     )}
 
-                    {/* Undo toast — fixed bottom-right */}
+                    {/* ── Assign Camp Modal ── */}
+                    {assignModal && (() => {
+                      const { kid, wk } = assignModal
+                      const week        = SUMMER_WEEKS.find(w => w.wk === wk)
+                      const assigned    = getWeekCamp(kid, wk)
+                      const offweekLbl  = getWeekOffweek(kid, wk)
+                      const eligible    = allCamps.filter(c => (c.kids||[]).includes(kid) && (c.weeks||[]).includes(wk))
+                      const sortedElig  = assigned ? [assigned, ...eligible.filter(c => c.id !== assigned.id)] : eligible
+                      const kidMember   = FAMILY_MEMBERS.find(m => m.name === kid)
+
+                      const doAssign = (campId, camp) => {
+                        const snap = { schedule: { ...schedule }, offweeks: { ...offweeks } }
+                        setWeekCamp(kid, wk, campId)
+                        setOffweeks(p => Object.fromEntries(Object.entries(p).filter(([k]) => k !== `${kid}-${wk}`)))
+                        setAssignModal(null)
+                        showScenarioToast(
+                          `Assigned Week ${wk} to ${camp.name}`,
+                          () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
+                        )
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
+                      }
+
+                      const doRemove = () => {
+                        const snap = { ...schedule }
+                        setWeekCamp(kid, wk, null)
+                        setAssignModal(null)
+                        showScenarioToast(`Removed Week ${wk} assignment`, () => setSchedule(snap))
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
+                      }
+
+                      const doOffweek = (label) => {
+                        const snap = { schedule: { ...schedule }, offweeks: { ...offweeks } }
+                        setWeekOffweek(kid, wk, label)
+                        setAssignModal(null)
+                        showScenarioToast(
+                          `Week ${wk} marked as ${label}`,
+                          () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
+                        )
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
+                      }
+
+                      const doClear = () => {
+                        const snap = { schedule: { ...schedule }, offweeks: { ...offweeks } }
+                        clearWeekAll(kid, wk)
+                        setAssignModal(null)
+                        showScenarioToast(
+                          `Cleared Week ${wk}`,
+                          () => { setSchedule(snap.schedule); setOffweeks(snap.offweeks) }
+                        )
+                        setTimeout(() => weekCardRefs.current[`${kid}-${wk}`]?.focus(), FOCUS_DELAY_MS)
+                      }
+
+                      return (
+                        <div
+                          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}
+                          onClick={e => { if (e.target === e.currentTarget) setAssignModal(null) }}
+                        >
+                          <div style={{ ...s.card({ maxWidth:500, width:'100%', margin:16, padding:'24px 28px', maxHeight:'85vh', overflowY:'auto' }), position:'relative' }}>
+                            {/* Header */}
+                            <div style={{ marginBottom:16 }}>
+                              <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.25rem', marginBottom:4, paddingRight:70 }}>
+                                Week {wk} · {week?.start}–{week?.end}
+                              </div>
+                              <div style={{ fontSize:'0.65rem', color:C.muted }}>
+                                <span style={{ color:kidMember?.color, fontWeight:700 }}>{kid}</span> · {eligible.length} eligible camp{eligible.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+
+                            {/* Close button */}
+                            <button
+                              onClick={() => setAssignModal(null)}
+                              style={{
+                                position:'absolute', top:16, right:16,
+                                background:C.bg, border:`1px solid ${C.border}`,
+                                color:C.muted, borderRadius:8, padding:'5px 12px',
+                                fontSize:'0.65rem', cursor:'pointer', fontFamily:"'Outfit',sans-serif",
+                              }}
+                            >✕ Close</button>
+
+                            {/* Camp list */}
+                            {sortedElig.length === 0 ? (
+                              <div style={{ ...s.card({ background:C.bg, padding:'20px', textAlign:'center', marginBottom:14 }) }}>
+                                <div style={{ fontSize:'1.5rem', marginBottom:8 }}>🏕️</div>
+                                <div style={{ fontSize:'0.78rem', fontWeight:600, color:C.text, marginBottom:4 }}>No eligible camps</div>
+                                <div style={{ fontSize:'0.65rem', color:C.muted }}>
+                                  No camp in our library fits {kid} for this week. Check the Camps Library or mark this week as Family Time below.
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+                                {sortedElig.map(camp => {
+                                  const isCurrent = assigned?.id === camp.id
+                                  return (
+                                    <div
+                                      key={camp.id}
+                                      tabIndex={0}
+                                      onKeyDown={e => { if (e.key === 'Enter' && !isCurrent) doAssign(camp.id, camp) }}
+                                      style={{
+                                        ...s.card({
+                                          padding:'12px 14px',
+                                          borderColor: isCurrent ? camp.color+'66' : camp.color+'22',
+                                          background: isCurrent ? camp.color+'0d' : 'transparent',
+                                          display:'flex', alignItems:'flex-start', gap:10,
+                                        })
+                                      }}
+                                    >
+                                      <div style={{ width:10, height:10, borderRadius:'50%', background:camp.color, marginTop:5, flexShrink:0 }} />
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, flexWrap:'wrap' }}>
+                                          <span style={{ fontSize:'0.78rem', fontWeight:700, color:camp.color }}>{camp.emoji} {camp.name}</span>
+                                          {isCurrent && (
+                                            <span style={{ background:camp.color+'22', color:camp.color, padding:'2px 7px', borderRadius:8, fontSize:'0.58rem', fontWeight:700 }}>
+                                              Currently assigned
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:4 }}>
+                                          <span style={{ fontSize:'0.62rem', color:C.textSoft }}>${camp.costWk}/wk</span>
+                                          <span style={{ color:C.dim }}>·</span>
+                                          <span style={{ fontSize:'0.62rem', color:C.textSoft }}>🚗 {camp.driveMins} min</span>
+                                          <span style={{ color:C.dim }}>·</span>
+                                          <span style={{ fontSize:'0.62rem', color:C.textSoft }}>{camp.fullDay ? 'Full day' : 'Half day'}</span>
+                                          <span style={{ color:C.dim }}>·</span>
+                                          <span style={{ fontSize:'0.62rem', color:C.textSoft }}>Age {camp.ageMin}–{camp.ageMax}</span>
+                                        </div>
+                                        <div style={{ fontSize:'0.6rem', color:C.muted }}>{camp.desc}</div>
+                                      </div>
+                                      <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+                                        {isCurrent ? (
+                                          <button
+                                            onClick={doRemove}
+                                            style={{
+                                              padding:'6px 12px', borderRadius:8,
+                                              border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose,
+                                              fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', cursor:'pointer', fontWeight:600,
+                                            }}
+                                          >Remove</button>
+                                        ) : (
+                                          <button
+                                            onClick={() => doAssign(camp.id, camp)}
+                                            style={{
+                                              ...s.btn(camp.color),
+                                              padding:'6px 12px', fontSize:'0.62rem', whiteSpace:'nowrap',
+                                            }}
+                                          >{assigned ? 'Switch to this' : 'Assign'}</button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* Off-week / PTO options */}
+                            <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:12 }}>
+                              <div style={{ fontSize:'0.6rem', color:C.muted, marginBottom:8, letterSpacing:'0.08em', textTransform:'uppercase' }}>Mark week as</div>
+                              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                {[
+                                  { label:'Family Time', emoji:'🏡' },
+                                  { label:'Travel',      emoji:'✈️' },
+                                  { label:'PTO',         emoji:'💼' },
+                                ].map(opt => (
+                                  <button
+                                    key={opt.label}
+                                    onClick={() => doOffweek(opt.label)}
+                                    style={{
+                                      padding:'6px 12px', borderRadius:8,
+                                      border:`1px solid ${offweekLbl === opt.label ? C.stone+'88' : C.border}`,
+                                      background: offweekLbl === opt.label ? C.stoneBg : C.bg,
+                                      color: offweekLbl === opt.label ? C.stone : C.textSoft,
+                                      fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', cursor:'pointer',
+                                      fontWeight: offweekLbl === opt.label ? 700 : 400,
+                                    }}
+                                  >{opt.emoji} {opt.label}</button>
+                                ))}
+                                {(assigned || offweekLbl) && (
+                                  <button
+                                    onClick={doClear}
+                                    style={{
+                                      padding:'6px 12px', borderRadius:8,
+                                      border:`1px solid ${C.border}`, background:'transparent', color:C.muted,
+                                      fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', cursor:'pointer',
+                                    }}
+                                  >↩ Clear week</button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* DnD undo toast — fixed bottom-right */}
                     {undoToast && (
                       <div style={{
                         position:'fixed', bottom:24, right:24, zIndex:1000,
@@ -2384,6 +2748,28 @@ export default function BrockFamilyHub() {
               display:'flex', alignItems:'center', gap:8,
             }}>
               🔄 {gcal.toast.message}
+            </div>
+          )}
+
+          {/* ── Scenario Builder undo toast ─────────────────────── */}
+          {scenarioToast && (
+            <div style={{
+              position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+              background:C.text, color:'#fff', borderRadius:10, padding:'10px 18px',
+              fontSize:'0.72rem', zIndex:501, boxShadow:'0 4px 16px rgba(0,0,0,0.22)',
+              display:'flex', alignItems:'center', gap:12, whiteSpace:'nowrap',
+            }}>
+              <span>✓ {scenarioToast.message}</span>
+              {scenarioToast.undoFn && (
+                <button
+                  onClick={() => { scenarioToast.undoFn(); setScenarioToast(null); if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }}
+                  style={{
+                    background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.35)',
+                    color:'#fff', borderRadius:6, padding:'3px 10px',
+                    fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', cursor:'pointer', fontWeight:700,
+                  }}
+                >Undo</button>
+              )}
             </div>
           )}
 
