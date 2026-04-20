@@ -8,7 +8,41 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# ─── Discover edge function ───────────────────────────────────────────────────
 [[edge_functions]]
   path = "/api/discover"
   function = "discover"
- 
+
+# ─── Google Auth edge function ────────────────────────────────────────────────
+[[edge_functions]]
+  path = "/api/google/auth/start"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/callback"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/refresh"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/logout"
+  function = "google-auth"
+
+[[edge_functions]]
+  path = "/api/google/auth/status"
+  function = "google-auth"
+
+# ─── Calendar sync edge function ─────────────────────────────────────────────
+[[edge_functions]]
+  path = "/api/calendar/list"
+  function = "calendar-sync"
+
+[[edge_functions]]
+  path = "/api/calendar/events"
+  function = "calendar-sync"
+
+[[edge_functions]]
+  path = "/api/calendar/events/*"
+  function = "calendar-sync"

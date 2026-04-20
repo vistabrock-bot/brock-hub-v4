@@ -1,5 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useGoogleCalendar } from '../hooks/useGoogleCalendar'
+import { useSyncStatus } from '../hooks/useSyncStatus'
 
 // ─── SOFT NEUTRAL THEME ─────────────────────────────────────────
 const C = {
@@ -313,6 +315,13 @@ export default function BrockFamilyHub() {
   const [events, setEvents]     = useState([])
   const [eventForm, setEventForm] = useState(null) // null = closed, {} = new, {..} = editing
 
+  // Google Calendar sync
+  const gcal = useGoogleCalendar(events, setEvents)
+  const syncStatus = useSyncStatus(gcal)
+  const [gcalCalendars, setGcalCalendars] = useState([])
+  const [gcalMapping, setGcalMapping] = useState({})
+  const [mappingSaved, setMappingSaved] = useState(false)
+
   // Tasks (persisted)
   const [tasks, setTasks]       = useState([])
   const [taskText, setTaskText] = useState('')
@@ -378,6 +387,8 @@ export default function BrockFamilyHub() {
       { id:4, title:"Anastasia 6-month Checkup", date:'2026-05-11', time:'10:00', location:'Austin Regional Clinic', description:'Schedule with pediatrician', color:C.rose },
     ]))
     setCustomCamps(loadLS('customCamps', []))
+    // Load gcal mapping
+    try { setGcalMapping(JSON.parse(localStorage.getItem('bfh:gcalMapping') || '{}')) } catch {}
     setMounted(true)
   }, [])
 
@@ -389,6 +400,16 @@ export default function BrockFamilyHub() {
   useEffect(() => { if(mounted) saveLS('meals', meals) }, [meals, mounted])
   useEffect(() => { if(mounted) saveLS('events', events) }, [events, mounted])
   useEffect(() => { if(mounted) saveLS('customCamps', customCamps) }, [customCamps, mounted])
+
+  // Load Google Calendar list when Sync Settings tab is active
+  useEffect(() => {
+    if (plannerTab === 'sync' && gcal.connected && gcalCalendars.length === 0) {
+      fetch('/api/calendar/list')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.items) setGcalCalendars(d.items) })
+        .catch(() => {})
+    }
+  }, [plannerTab, gcal.connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clock
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
@@ -539,14 +560,23 @@ export default function BrockFamilyHub() {
   // Event CRUD helpers
   const saveEvent = (form) => {
     if (!form.title?.trim()) return
+    const now = new Date().toISOString()
     if (form.id) {
-      setEvents(p => p.map(e => e.id === form.id ? { ...form } : e))
+      const updated = { ...form, updatedAt: now, syncStatus: 'pending' }
+      setEvents(p => p.map(e => e.id === form.id ? updated : e))
+      gcal.upsertEvent(updated)
     } else {
-      setEvents(p => [...p, { ...form, id: Date.now() }])
+      const newEvent = { ...form, id: `local_${Date.now()}`, updatedAt: now, syncStatus: gcal.connected ? 'pending' : 'local-only' }
+      setEvents(p => [...p, newEvent])
+      gcal.upsertEvent(newEvent)
     }
     setEventForm(null)
   }
-  const deleteEvent = (id) => setEvents(p => p.filter(e => e.id !== id))
+  const deleteEvent = (id) => {
+    const ev = events.find(e => e.id === id)
+    setEvents(p => p.filter(e => e.id !== id))
+    if (ev) gcal.deleteEvent(ev)
+  }
   const sortedEvents = [...events].sort((a,b) => (a.date||'').localeCompare(b.date||''))
 
   // Task helpers
@@ -1019,6 +1049,7 @@ export default function BrockFamilyHub() {
                   ['all-events','🗂','All Events'],
                   ['camps','🏕️','Camps Library'],
                   ['scenario','🧠','Scenario Builder'],
+                  ['sync','🔄','Sync Settings'],
                 ].map(([id,icon,label]) => (
                   <button key={id} onClick={()=>setPlannerTab(id)} style={{
                     display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 10px',
@@ -1032,6 +1063,27 @@ export default function BrockFamilyHub() {
                     <span style={{ fontSize:'0.9rem' }}>{icon}</span>{label}
                   </button>
                 ))}
+
+                {/* Sync status mini-card */}
+                <div style={{ margin:'12px 4px 4px', padding:'10px 10px', borderRadius:9, background:C.bg, border:`1px solid ${C.border}` }}>
+                  <div style={{ fontSize:'0.5rem', letterSpacing:'0.14em', textTransform:'uppercase', color:C.muted, fontWeight:700, marginBottom:6 }}>Sync Status</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:syncStatus.dot==='green'?'#5ba370':syncStatus.dot==='yellow'?'#c8a44a':syncStatus.dot==='red'?'#c05050':'#aab1b8', flexShrink:0, display:'inline-block' }}/>
+                    <span style={{ fontSize:'0.62rem', fontWeight:600, color:C.textSoft }}>{syncStatus.label}</span>
+                  </div>
+                  {syncStatus.email && <div style={{ fontSize:'0.56rem', color:C.muted, marginBottom:4 }}>{syncStatus.email}</div>}
+                  {syncStatus.lastSyncedAgo && <div style={{ fontSize:'0.56rem', color:C.muted, marginBottom:4 }}>Last synced: {syncStatus.lastSyncedAgo}</div>}
+                  {syncStatus.syncedCount > 0 && <div style={{ fontSize:'0.56rem', color:C.muted, marginBottom:6 }}>{syncStatus.syncedCount} event{syncStatus.syncedCount!==1?'s':''} · {syncStatus.calendarCount} cal{syncStatus.calendarCount!==1?'s':''}</div>}
+                  {syncStatus.connected ? (
+                    <button onClick={gcal.refresh} disabled={syncStatus.syncing} style={{ width:'100%', padding:'5px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:syncStatus.syncing?'default':'pointer', opacity:syncStatus.syncing?0.5:1 }}>
+                      {syncStatus.syncing ? '⟳ Syncing…' : '↻ Refresh'}
+                    </button>
+                  ) : (
+                    <button onClick={gcal.connect} style={{ width:'100%', padding:'5px', borderRadius:7, border:`1px solid ${C.sage}44`, background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif", fontSize:'0.6rem', cursor:'pointer', fontWeight:700 }}>
+                      Connect Google Calendar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Submodule content */}
@@ -1426,11 +1478,25 @@ export default function BrockFamilyHub() {
                             {ev.description&&<div style={{ fontSize:'0.72rem', color:C.textSoft, lineHeight:1.5 }}>{ev.description}</div>}
                           </div>
                           <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                            <a href={buildGCalUrl(ev)} target="_blank" rel="noopener noreferrer" style={{
-                              padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
-                              background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
-                              textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
-                            }}>📅 gCal</a>
+                            {(() => {
+                              // When synced, link directly to the event; otherwise use template URL
+                              const eid = ev.gcalEventId
+                                ? btoa([ev.gcalEventId, ev.gcalCalendarId].filter(Boolean).join(' '))
+                                : null
+                              const gcalUrl = eid
+                                ? `https://calendar.google.com/calendar/event?eid=${eid}`
+                                : buildGCalUrl(ev)
+                              return (
+                                <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title={eid ? 'Open in Google Calendar' : 'Add to Google Calendar'} style={{
+                                  padding:'6px 10px', borderRadius:8, border:`1px solid ${C.sage}44`,
+                                  background:C.sageBg, color:C.sage, fontSize:'0.62rem', fontWeight:700,
+                                  textDecoration:'none', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4
+                                }}>
+                                  📅 gCal
+                                  {ev.syncStatus === 'synced' && <span style={{ fontSize:'0.5rem', opacity:0.7 }}>●</span>}
+                                </a>
+                              )
+                            })()}
                             <button onClick={()=>setEventForm({...ev})} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontSize:'0.6rem', cursor:'pointer' }}>✏️</button>
                             <button onClick={()=>deleteEvent(ev.id)} style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontSize:'0.6rem', cursor:'pointer' }}>🗑️</button>
                           </div>
@@ -1692,6 +1758,133 @@ export default function BrockFamilyHub() {
                   </div>
                 )}
 
+                {/* ── VIEW 7: SYNC SETTINGS ── */}
+                {plannerTab === 'sync' && (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Google Calendar <span style={{ color:C.sage }}>Sync</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Two-way sync · Per-person calendar mapping · Conflict resolution
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Connect / Status card */}
+                    <div style={{ ...s.card({ marginBottom:16 }) }}>
+                      <div style={s.sectionLabel}>Connection<div style={s.labelLine}/></div>
+                      {gcal.connected ? (
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                          <div>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                              <span style={{ width:10, height:10, borderRadius:'50%', background: syncStatus.dot==='green'?'#5ba370':syncStatus.dot==='yellow'?'#c8a44a':'#c05050', display:'inline-block' }}/>
+                              <span style={{ fontSize:'0.8rem', fontWeight:700 }}>{syncStatus.label}</span>
+                            </div>
+                            <div style={{ fontSize:'0.7rem', color:C.muted }}>{gcal.email}</div>
+                            {syncStatus.lastSyncedAgo && <div style={{ fontSize:'0.65rem', color:C.muted, marginTop:2 }}>Last synced: {syncStatus.lastSyncedAgo} · {syncStatus.syncedCount} events · {syncStatus.calendarCount} calendars</div>}
+                            {gcal.syncError && <div style={{ fontSize:'0.62rem', color:C.rose, marginTop:4 }}>⚠️ {gcal.syncError}</div>}
+                          </div>
+                          <div style={{ display:'flex', gap:8 }}>
+                            <button onClick={gcal.refresh} disabled={gcal.syncing} style={{ ...s.btn(C.sky), opacity:gcal.syncing?0.5:1, fontSize:'0.68rem', padding:'8px 14px' }}>
+                              {gcal.syncing ? '⟳ Syncing…' : '↻ Refresh'}
+                            </button>
+                            <button onClick={async()=>{ if(confirm('Disconnect Google Calendar and remove sync data?')) await gcal.disconnect() }} style={{ padding:'8px 14px', borderRadius:10, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontFamily:"'Outfit',sans-serif", fontSize:'0.68rem', cursor:'pointer' }}>
+                              Disconnect
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:'0.78rem', fontWeight:600, marginBottom:4 }}>⚪ Not connected</div>
+                            <div style={{ fontSize:'0.65rem', color:C.muted }}>Connect Google Calendar to enable two-way sync across Bakari's, Jenya's, and Tanya's calendars.</div>
+                          </div>
+                          <button onClick={gcal.connect} style={{ ...s.btn(), fontSize:'0.7rem', padding:'10px 18px', whiteSpace:'nowrap' }}>
+                            🔗 Connect Google Calendar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Calendar Mapping */}
+                    {gcal.connected && (
+                      <div style={{ ...s.card({ marginBottom:16 }) }}>
+                        <div style={s.sectionLabel}>Calendar Mapping<div style={s.labelLine}/></div>
+                        <div style={{ fontSize:'0.65rem', color:C.muted, marginBottom:12 }}>
+                          Map each family member to their Google Calendar. Events created for that person will sync to that calendar.
+                        </div>
+                        {[
+                          { id:'bakari',    name:'Bakari',    color:C.bakari },
+                          { id:'jenya',     name:'Jenya',     color:C.jenya },
+                          { id:'monroe',    name:'Monroe',    color:C.monroe },
+                          { id:'genevieve', name:'Genevieve', color:C.genevieve },
+                          { id:'anastasia', name:'Anastasia', color:C.anastasia },
+                          { id:'family',    name:'Family',    color:C.family },
+                          { id:'tanya',     name:'Tanya',     color:C.stone },
+                        ].map(member => (
+                          <div key={member.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 0', borderBottom:`1px solid ${C.border}` }}>
+                            <span style={{ width:10, height:10, borderRadius:'50%', background:member.color, flexShrink:0, display:'inline-block' }}/>
+                            <span style={{ width:90, fontSize:'0.75rem', fontWeight:600, color:C.text }}>{member.name}</span>
+                            <select
+                              value={gcalMapping[member.id] || ''}
+                              onChange={e => setGcalMapping(p => ({ ...p, [member.id]: e.target.value }))}
+                              style={{ ...s.input, flex:1, cursor:'pointer', fontSize:'0.7rem', padding:'6px 10px' }}
+                            >
+                              <option value="">— Not mapped —</option>
+                              {gcalCalendars.map(cal => (
+                                <option key={cal.id} value={cal.id}>{cal.summary}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                        {gcalCalendars.length === 0 && (
+                          <div style={{ fontSize:'0.65rem', color:C.muted, padding:'8px 0' }}>
+                            Loading calendars… Make sure you're connected above.
+                          </div>
+                        )}
+                        <div style={{ display:'flex', gap:8, marginTop:14 }}>
+                          <button onClick={() => {
+                            localStorage.setItem('bfh:gcalMapping', JSON.stringify(gcalMapping))
+                            setMappingSaved(true)
+                            setTimeout(() => setMappingSaved(false), 2000)
+                          }} style={{ ...s.btn(), fontSize:'0.7rem', padding:'9px 18px' }}>
+                            {mappingSaved ? '✓ Saved!' : '💾 Save Mapping'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Push unsynced events */}
+                    {gcal.connected && events.filter(e => !e.gcalEventId).length > 0 && (
+                      <div style={{ ...s.card({ marginBottom:16, borderColor:C.stone+'44' }) }}>
+                        <div style={s.sectionLabel}>Unsynced Events<div style={s.labelLine}/></div>
+                        <div style={{ fontSize:'0.72rem', color:C.textSoft, marginBottom:12 }}>
+                          {events.filter(e => !e.gcalEventId).length} event{events.filter(e => !e.gcalEventId).length!==1?'s':''} exist only in the Hub and have not been pushed to Google Calendar.
+                        </div>
+                        <button onClick={gcal.pushUnsynced} disabled={gcal.syncing} style={{ ...s.btn(C.stone), fontSize:'0.7rem', padding:'9px 18px', opacity:gcal.syncing?0.5:1 }}>
+                          ↑ Push {events.filter(e => !e.gcalEventId).length} Unsynced Event{events.filter(e => !e.gcalEventId).length!==1?'s':''}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Setup guide */}
+                    <div style={{ ...s.card({ background:C.bgWarm }) }}>
+                      <div style={s.sectionLabel}>Setup Guide<div style={s.labelLine}/></div>
+                      <ol style={{ margin:0, paddingLeft:20, fontSize:'0.68rem', color:C.textSoft, lineHeight:2 }}>
+                        <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color:C.sage }}>console.cloud.google.com</a> → Create project "Brock Family Hub"</li>
+                        <li>Enable <strong>Google Calendar API</strong></li>
+                        <li>OAuth consent screen → External → add scopes: <code>calendar.events</code>, <code>calendar.calendarlist.readonly</code></li>
+                        <li>Credentials → Create OAuth 2.0 Client ID → Web app</li>
+                        <li>Authorized redirect URI: <code>https://brockfamily.netlify.app/api/google/auth/callback</code></li>
+                        <li>Add env vars in Netlify: <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, <code>GOOGLE_REDIRECT_URI</code>, <code>SESSION_SECRET</code></li>
+                        <li>Generate SESSION_SECRET: run <code>openssl rand -base64 32</code></li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* ── SHARED EVENT FORM MODAL (planner-wide) ── */}
@@ -1737,19 +1930,39 @@ export default function BrockFamilyHub() {
                     </div>
                     <div style={{ display:'flex', gap:8, marginTop:18 }}>
                       <button onClick={()=>saveEvent(eventForm)} style={{ ...s.btn(), flex:1 }}>💾 Save</button>
-                      {eventForm.id && (
-                        <a href={buildGCalUrl(eventForm)} target="_blank" rel="noopener noreferrer" style={{
-                          flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.sage}44`,
-                          background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
-                          fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
-                          display:'flex', alignItems:'center', justifyContent:'center', gap:4
-                        }}>📅 Add to gCal</a>
-                      )}
+                      {eventForm.id && (() => {
+                        const eid = eventForm.gcalEventId
+                          ? btoa([eventForm.gcalEventId, eventForm.gcalCalendarId].filter(Boolean).join(' '))
+                          : null
+                        const gcalUrl = eid
+                          ? `https://calendar.google.com/calendar/event?eid=${eid}`
+                          : buildGCalUrl(eventForm)
+                        return (
+                          <a href={gcalUrl} target="_blank" rel="noopener noreferrer" style={{
+                            flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.sage}44`,
+                            background:C.sageBg, color:C.sage, fontFamily:"'Outfit',sans-serif",
+                            fontSize:'0.7rem', fontWeight:700, cursor:'pointer', textDecoration:'none',
+                            display:'flex', alignItems:'center', justifyContent:'center', gap:4
+                          }}>📅 {eid ? 'Open in gCal' : 'Add to gCal'}</a>
+                        )
+                      })()}
                       <button onClick={()=>setEventForm(null)} style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}>Cancel</button>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Sync toast notification ─────────────────────────── */}
+          {gcal.toast && (
+            <div style={{
+              position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+              background:C.text, color:'#fff', borderRadius:10, padding:'10px 20px',
+              fontSize:'0.72rem', zIndex:500, boxShadow:'0 4px 16px rgba(0,0,0,0.18)',
+              display:'flex', alignItems:'center', gap:8,
+            }}>
+              🔄 {gcal.toast.message}
             </div>
           )}
 
