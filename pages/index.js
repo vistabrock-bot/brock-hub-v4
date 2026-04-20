@@ -293,6 +293,301 @@ function buildGCalUrl(event) {
   return `${base}&text=${title}&dates=${dates}&details=${details}&location=${location}`
 }
 
+// ─── DRAG & DROP CONSTANTS ──────────────────────────────────────
+const TOAST_AUTO_DISMISS_MS      = 4000  // matches the 4 s spec
+const LONG_PRESS_TIMEOUT_MS      = 350   // ms before touch drag starts
+const DRAG_MOVEMENT_THRESHOLD_PX = 8     // px before a touch cancels long-press
+const MAX_UNDO_STACK_SIZE        = 5     // spec: "last 5 actions"
+const PULSE_ANIMATION_DURATION_MS= 200   // must match @keyframes dndPulse
+
+// ─── DRAG & DROP HOOK ───────────────────────────────────────────
+function useDragDrop({ schedule, setSchedule, allCamps, planKid }) {
+  const [dragState, setDragState] = useState({
+    isDragging: false, sourceType: null, sourceId: null,
+    overTarget: null, isValidDrop: true,
+  })
+  const [undoStack, setUndoStack] = useState([])
+  const [undoToast, setUndoToast] = useState(null)
+  const [pulsingWk, setPulsingWk] = useState(null)
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const [kbPickup, setKbPickup] = useState(null)
+  const [kbAnnounce, setKbAnnounce] = useState('')
+  const longPressRef = useRef(null)
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const toastTimerRef = useRef(null)
+  // Refs so pointer-event callbacks always see latest values without stale closures
+  const dragStateRef = useRef(dragState)
+  const scheduleRef = useRef(schedule)
+  const planKidRef = useRef(planKid)
+  const allCampsRef = useRef(allCamps)
+  useEffect(() => { dragStateRef.current = dragState }, [dragState])
+  useEffect(() => { scheduleRef.current = schedule }, [schedule])
+  useEffect(() => { planKidRef.current = planKid }, [planKid])
+  useEffect(() => { allCampsRef.current = allCamps }, [allCamps])
+
+  // Detect touch / pen (hover: none)
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: none)')
+    setIsTouchDevice(mq.matches)
+    const onChange = (ev) => setIsTouchDevice(ev.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  // Toast auto-dismiss (4 s)
+  useEffect(() => {
+    if (!undoToast) return
+    clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setUndoToast(null), TOAST_AUTO_DISMISS_MS)
+    return () => clearTimeout(toastTimerRef.current)
+  }, [undoToast])
+
+  // Pulse cleanup
+  useEffect(() => {
+    if (pulsingWk === null) return
+    const t = setTimeout(() => setPulsingWk(null), PULSE_ANIMATION_DURATION_MS)
+    return () => clearTimeout(t)
+  }, [pulsingWk])
+
+  const undo = useCallback(() => {
+    setUndoStack(s => {
+      if (!s.length) return s
+      const { schedule: prev } = s[s.length - 1]
+      setSchedule(prev)
+      setUndoToast(null)
+      return s.slice(0, -1)
+    })
+  }, [setSchedule])
+
+  // ⌘Z / Ctrl+Z keyboard shortcut
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [undo])
+
+  const isEligible = (kid, wk, campId) => {
+    const camp = allCampsRef.current.find(c => c.id === campId)
+    return camp ? (camp.kids || []).includes(kid) && (camp.weeks || []).includes(wk) : false
+  }
+
+  const pushUndo = (prev) => {
+    setUndoStack(s => [...s, { schedule: prev }].slice(-MAX_UNDO_STACK_SIZE))
+  }
+
+  const showToast = (message) => setUndoToast({ message })
+
+  const executeDrop = (srcType, srcId, target) => {
+    const sched = scheduleRef.current
+    const kid = planKidRef.current
+    const camps = allCampsRef.current
+
+    if (target === 'remove') {
+      if (srcType !== 'week') return
+      const cid = sched[srcId]
+      if (!cid) return
+      const [, wkStr] = srcId.split('-')
+      const campName = camps.find(c => c.id === cid)?.name || 'camp'
+      const prev = { ...sched }
+      setSchedule(p => { const n = { ...p }; delete n[srcId]; return n })
+      pushUndo(prev)
+      showToast(`Removed ${campName} from Week ${wkStr}`)
+      return
+    }
+
+    const targetWk = typeof target === 'number' ? target : parseInt(target)
+    const tgtKey = `${kid}-${targetWk}`
+
+    if (srcType === 'chip') {
+      const campId = srcId
+      if (!isEligible(kid, targetWk, campId)) return
+      const camp = camps.find(c => c.id === campId)
+      const weekDef = SUMMER_WEEKS.find(w => w.wk === targetWk)
+      const prev = { ...sched }
+      setSchedule(p => ({ ...p, [tgtKey]: campId }))
+      setPulsingWk(targetWk)
+      pushUndo(prev)
+      showToast(`Assigned ${camp?.name} to ${weekDef?.start || `Week ${targetWk}`}`)
+    } else if (srcType === 'week') {
+      if (srcId === tgtKey) return
+      const srcCampId = sched[srcId]
+      if (!srcCampId) return
+      const tgtCampId = sched[tgtKey]
+      const [srcKid, srcWkStr] = srcId.split('-')
+      const srcWk = parseInt(srcWkStr)
+      if (tgtCampId) {
+        if (!isEligible(srcKid, srcWk, tgtCampId) || !isEligible(kid, targetWk, srcCampId)) return
+      } else {
+        if (!isEligible(kid, targetWk, srcCampId)) return
+      }
+      const srcCamp = camps.find(c => c.id === srcCampId)
+      const prev = { ...sched }
+      setSchedule(p => {
+        const n = { ...p }
+        if (tgtCampId) { n[srcId] = tgtCampId; n[tgtKey] = srcCampId }
+        else { delete n[srcId]; n[tgtKey] = srcCampId }
+        return n
+      })
+      setPulsingWk(targetWk)
+      pushUndo(prev)
+      const verb = tgtCampId ? 'Swapped' : 'Moved'
+      showToast(`${verb} ${srcCamp?.name} to Week ${targetWk}`)
+    }
+  }
+
+  // ── Grid-level pointer delegation ──────────────────────────────
+  const handlePointerDown = (e) => {
+    // Let interactive elements handle their own clicks
+    if (e.target.closest('button, a, input, select, textarea')) return
+    const dragEl = e.target.closest('[data-drag-source]')
+    if (!dragEl) return
+    const sourceType = dragEl.dataset.dragSource
+    const sourceId = sourceType === 'chip' ? dragEl.dataset.campId : dragEl.dataset.weekKey
+    if (sourceType === 'week' && !scheduleRef.current[sourceId]) return
+    dragStartRef.current = { x: e.clientX, y: e.clientY }
+    const gridEl = e.currentTarget
+    const pId = e.pointerId
+    if (e.pointerType === 'touch') {
+      // Long-press required on touch to disambiguate drag-intent from scrolling
+      longPressRef.current = setTimeout(() => {
+        gridEl.setPointerCapture(pId)
+        setDragState({ isDragging: true, sourceType, sourceId, overTarget: null, isValidDrop: true })
+        longPressRef.current = null
+      }, LONG_PRESS_TIMEOUT_MS)
+    } else {
+      // Mouse / pen: immediate drag
+      e.currentTarget.setPointerCapture(e.pointerId)
+      setDragState({ isDragging: true, sourceType, sourceId, overTarget: null, isValidDrop: true })
+    }
+  }
+
+  const handlePointerMove = (e) => {
+    if (longPressRef.current) {
+      const dx = e.clientX - dragStartRef.current.x
+      const dy = e.clientY - dragStartRef.current.y
+      if (Math.sqrt(dx * dx + dy * dy) > DRAG_MOVEMENT_THRESHOLD_PX) {
+        clearTimeout(longPressRef.current)
+        longPressRef.current = null
+      }
+      return
+    }
+    const ds = dragStateRef.current
+    if (!ds.isDragging) return
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const dropEl = el?.closest('[data-drop-target]')
+    const rawTarget = dropEl?.dataset.dropTarget
+    const overTarget = rawTarget === 'remove' ? 'remove'
+      : rawTarget === 'week' ? parseInt(dropEl.dataset.weekWk)
+      : null
+    let isValidDrop = true
+    if (overTarget !== null && overTarget !== 'remove') {
+      const tgtWk = overTarget
+      const tgtKey = `${planKidRef.current}-${tgtWk}`
+      const sched = scheduleRef.current
+      if (ds.sourceType === 'chip') {
+        isValidDrop = isEligible(planKidRef.current, tgtWk, ds.sourceId)
+      } else {
+        const srcCampId = sched[ds.sourceId]
+        const tgtCampId = sched[tgtKey]
+        // sourceId is always set when isDragging===true; '-0' is a safe fallback
+        const [srcKid, srcWkStr] = (ds.sourceId || '-0').split('-')
+        isValidDrop = srcCampId
+          ? tgtCampId
+            ? isEligible(srcKid, parseInt(srcWkStr), tgtCampId) && isEligible(planKidRef.current, tgtWk, srcCampId)
+            : isEligible(planKidRef.current, tgtWk, srcCampId)
+          : false
+      }
+    }
+    setDragState(prev => {
+      if (prev.overTarget === overTarget && prev.isValidDrop === isValidDrop) return prev
+      return { ...prev, overTarget, isValidDrop }
+    })
+  }
+
+  const handlePointerUp = (e) => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+    const ds = dragStateRef.current
+    if (!ds.isDragging) return
+    const { sourceType, sourceId, overTarget, isValidDrop } = ds
+    if (overTarget !== null) {
+      if (isValidDrop) {
+        const sameSpot = overTarget !== 'remove' && sourceId === `${planKidRef.current}-${overTarget}`
+        if (!sameSpot) executeDrop(sourceType, sourceId, overTarget)
+      } else if (overTarget !== 'remove') {
+        const wkDef = SUMMER_WEEKS.find(w => w.wk === overTarget)
+        const sched = scheduleRef.current
+        const name = sourceType === 'chip'
+          ? allCampsRef.current.find(c => c.id === sourceId)?.name
+          : allCampsRef.current.find(c => c.id === sched[sourceId])?.name
+        if (name && wkDef) showToast(`${name} isn't offered the week of ${wkDef.start}`)
+      }
+    }
+    setDragState({ isDragging: false, sourceType: null, sourceId: null, overTarget: null, isValidDrop: true })
+  }
+
+  const handlePointerCancel = () => {
+    if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null }
+    setDragState({ isDragging: false, sourceType: null, sourceId: null, overTarget: null, isValidDrop: true })
+  }
+
+  // ── Keyboard accessibility (Space = pick-up/drop, Escape = cancel) ──
+  const handleWeekKeyDown = (e, weekKey) => {
+    if (e.key === ' ') {
+      e.preventDefault()
+      if (!kbPickup) {
+        if (!scheduleRef.current[weekKey]) return
+        const [, wkStr] = weekKey.split('-')
+        const camp = allCampsRef.current.find(c => c.id === scheduleRef.current[weekKey])
+        setKbPickup({ sourceType: 'week', sourceId: weekKey })
+        setKbAnnounce(`Picked up Week ${wkStr}, ${camp?.name || 'camp'}. Press Space on a week to move. Escape to cancel.`)
+      } else {
+        const [, tgtWkStr] = weekKey.split('-')
+        const tgtWk = parseInt(tgtWkStr)
+        if (kbPickup.sourceId !== weekKey) executeDrop(kbPickup.sourceType, kbPickup.sourceId, tgtWk)
+        setKbPickup(null)
+        setKbAnnounce('')
+      }
+    } else if (e.key === 'Escape') {
+      setKbPickup(null)
+      setKbAnnounce('')
+    }
+  }
+
+  const handleChipKeyDown = (e, campId) => {
+    if (e.key === ' ') {
+      e.preventDefault()
+      const camp = allCampsRef.current.find(c => c.id === campId)
+      setKbPickup({ sourceType: 'chip', sourceId: campId })
+      setKbAnnounce(`Picked up ${camp?.name || 'camp'}. Press Space on a week to assign. Escape to cancel.`)
+    } else if (e.key === 'Escape') {
+      setKbPickup(null)
+      setKbAnnounce('')
+    }
+  }
+
+  return {
+    dragState, undoStack, undoToast, pulsingWk, isTouchDevice, kbPickup, kbAnnounce,
+    undo,
+    dismissToast: () => { clearTimeout(toastTimerRef.current); setUndoToast(null) },
+    dndHandlers: {
+      onPointerDown: handlePointerDown,
+      onPointerMove: handlePointerMove,
+      onPointerUp: handlePointerUp,
+      onPointerCancel: handlePointerCancel,
+    },
+    handleWeekKeyDown,
+    handleChipKeyDown,
+  }
+}
+
 // ─── MAIN COMPONENT ─────────────────────────────────────────────
 export default function BrockFamilyHub() {
   const [tab, setTab]           = useState('home')
@@ -520,6 +815,13 @@ export default function BrockFamilyHub() {
 
   // Schedule helpers
   const allCamps = [...CAMPS, ...customCamps]
+
+  // DnD hook — must be called after allCamps is defined
+  const {
+    dragState, undoToast, pulsingWk, isTouchDevice, kbPickup, kbAnnounce,
+    undo, dismissToast, dndHandlers, handleWeekKeyDown, handleChipKeyDown,
+  } = useDragDrop({ schedule, setSchedule, allCamps, planKid })
+
   const setWeekCamp = (kid, wk, cid) => {
     setSchedule(p => cid ? { ...p, [`${kid}-${wk}`]: cid } : Object.fromEntries(Object.entries(p).filter(([k])=>k!==`${kid}-${wk}`)))
   }
@@ -693,6 +995,7 @@ export default function BrockFamilyHub() {
         <title>Brock Family Hub</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        <style>{`@keyframes dndPulse{0%{box-shadow:0 0 0 0 rgba(124,154,130,0.45)}100%{box-shadow:0 0 0 10px rgba(124,154,130,0)}}`}</style>
       </Head>
 
       <div style={{ fontFamily:"'Outfit',sans-serif", background:C.bg, minHeight:'100vh', color:C.text }}>
@@ -1632,7 +1935,12 @@ export default function BrockFamilyHub() {
 
                 {/* ── VIEW 7: SCENARIO BUILDER ── */}
                 {plannerTab === 'scenario' && (
-                  <div>
+                  <div style={{ position: 'relative' }}>
+                    {/* ARIA live region for keyboard DnD announcements */}
+                    <div role="status" aria-live="polite" style={{ position:'absolute', width:1, height:1, overflow:'hidden', clipPath:'inset(50%)', whiteSpace:'nowrap' }}>
+                      {kbAnnounce}
+                    </div>
+
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18 }}>
                       <div>
                         <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
@@ -1662,46 +1970,124 @@ export default function BrockFamilyHub() {
                     </div>
 
                     {/* Kid selector */}
-                    <div style={{ display:'flex', gap:6, marginBottom:16 }}>
+                    <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
                       {['Monroe','Genevieve'].map(k => {
                         const m = FAMILY_MEMBERS.find(fm=>fm.name===k)
                         return <button key={k} style={s.pill(planKid===k, m?.color)} onClick={()=>setPlanKid(k)}>{m?.emoji} {k}</button>
                       })}
                       <span style={{ fontSize:'0.62rem', color:C.muted, alignSelf:'center', marginLeft:8 }}>
-                        Click a week to assign or change a camp
+                        {kbPickup
+                          ? <strong style={{ color:C.sage }}>Picked up — Space on a week to drop · Escape to cancel</strong>
+                          : 'Click a week to assign · Drag chips or cards to rearrange · ⌘Z to undo'}
                       </span>
                     </div>
 
-                    {/* Week grid */}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(210px,1fr))', gap:10, marginBottom:20 }}>
+                    {/* Draggable camp chips */}
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16, padding:'10px 14px', background:C.bgWarm, borderRadius:12, border:`1px solid ${C.border}` }}>
+                      <span style={{ fontSize:'0.55rem', letterSpacing:'0.12em', textTransform:'uppercase', color:C.muted, fontWeight:700, alignSelf:'center', marginRight:4, flexShrink:0 }}>Drag to assign:</span>
+                      {allCamps.filter(c => (c.kids||[]).includes(planKid)).map(camp => {
+                        const isKbSrc = kbPickup?.sourceType === 'chip' && kbPickup?.sourceId === camp.id
+                        return (
+                          <div
+                            key={camp.id}
+                            data-drag-source="chip"
+                            data-camp-id={camp.id}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${camp.name}, $${camp.costWk}/wk. ${isKbSrc ? 'Picked up. Press Space on a week to assign, Escape to cancel.' : 'Press Space to pick up, then Space on a week to assign.'}`}
+                            onKeyDown={(e) => handleChipKeyDown(e, camp.id)}
+                            style={{
+                              display:'inline-flex', alignItems:'center', gap:4,
+                              padding:'5px 12px', borderRadius:20,
+                              border:`1.5px solid ${isKbSrc ? camp.color : camp.color+'55'}`,
+                              background: isKbSrc ? camp.color+'22' : camp.color+'0d',
+                              color: camp.color, fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', fontWeight:600,
+                              cursor: dragState.isDragging ? 'grabbing' : 'grab',
+                              transition:'all 0.15s', userSelect:'none',
+                              outline: isKbSrc ? `2px solid ${camp.color}88` : 'none', outlineOffset:2,
+                            }}
+                          >
+                            {isTouchDevice && <span style={{ fontSize:'0.45rem', opacity:0.5, marginRight:1 }}>⋮⋮</span>}
+                            {camp.emoji} {camp.name}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Week grid — pointer handlers attached here for delegation */}
+                    <div
+                      {...dndHandlers}
+                      style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(210px,1fr))', gap:10, marginBottom:12, position:'relative', touchAction: dragState.isDragging ? 'none' : 'auto', userSelect: dragState.isDragging ? 'none' : 'auto' }}
+                    >
                       {SUMMER_WEEKS.map(week => {
+                        const weekKey = `${planKid}-${week.wk}`
                         const assigned = getWeekCamp(planKid, week.wk)
                         const eligible = allCamps.filter(c => (c.kids||[]).includes(planKid) && (c.weeks||[]).includes(week.wk))
                         const isJul4 = week.wk === 5
+                        const isOver = dragState.overTarget === week.wk
+                        const isValidOver = isOver && dragState.isValidDrop
+                        const isInvalidOver = isOver && !dragState.isValidDrop
+                        const isSource = dragState.sourceType === 'week' && dragState.sourceId === weekKey
+                        const isKbSrc = kbPickup?.sourceType === 'week' && kbPickup?.sourceId === weekKey
+                        const isKbTarget = !!kbPickup && !isKbSrc
+                        const pulsing = pulsingWk === week.wk
+                        // Build aria-label in readable parts
+                        const wkBaseLabel = `Week ${week.wk}, ${week.start}–${week.end}, ${assigned ? `${assigned.name} assigned` : 'unassigned'}`
+                        const wkActionLabel = kbPickup ? '. Press Space to drop here' : (assigned ? '. Press Space to pick up' : '')
                         return (
-                          <div key={week.wk} style={{
-                            ...s.card({
-                              minHeight:130,
-                              borderColor:assigned?assigned.color+'55':C.border,
-                              background:assigned?assigned.color+'08':C.card,
-                              position:'relative'
-                            })
-                          }}>
+                          <div
+                            key={week.wk}
+                            data-drag-source={assigned ? 'week' : undefined}
+                            data-week-key={assigned ? weekKey : undefined}
+                            data-drop-target="week"
+                            data-week-wk={week.wk}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${wkBaseLabel}${wkActionLabel}`}
+                            onKeyDown={(e) => handleWeekKeyDown(e, weekKey)}
+                            style={{
+                              ...s.card({
+                                minHeight:130,
+                                borderColor: isInvalidOver ? C.rose
+                                           : isValidOver ? C.sage
+                                           : isKbSrc ? C.sage+'88'
+                                           : assigned ? assigned.color+'55' : C.border,
+                                borderWidth: (isOver || isKbSrc) ? 2 : 1,
+                                background: isValidOver ? C.sageBg
+                                          : isInvalidOver ? C.roseBg
+                                          : assigned ? assigned.color+'08' : C.card,
+                                position:'relative',
+                                cursor: dragState.isDragging
+                                  ? (isOver ? (dragState.isValidDrop ? 'copy' : 'not-allowed') : 'default')
+                                  : kbPickup ? 'pointer' : 'default',
+                                opacity: isSource ? 0.4 : 1,
+                                transform: isSource ? 'scale(0.97)' : 'scale(1)',
+                                boxShadow: isValidOver ? '0 4px 16px rgba(124,154,130,0.2)' : C.shadow,
+                                transition:'all 0.15s',
+                                animation: pulsing ? `dndPulse ${PULSE_ANIMATION_DURATION_MS}ms ease-out` : 'none',
+                                outline: isKbTarget ? `1px dashed ${C.sage}66` : 'none', outlineOffset:-2,
+                              }),
+                            }}
+                          >
                             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                               <div>
                                 <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1rem', color:assigned?assigned.color:C.muted }}>W{week.wk}</div>
                                 <div style={{ fontSize:'0.56rem', color:C.muted }}>{week.start}–{week.end}</div>
                               </div>
-                              {isJul4 && <span style={{ fontSize:'0.56rem', color:C.stone }}>🎆 Jul 4</span>}
+                              <div style={{ display:'flex', alignItems:'flex-start', gap:4 }}>
+                                {isJul4 && <span style={{ fontSize:'0.56rem', color:C.stone }}>🎆 Jul 4</span>}
+                                {isTouchDevice && assigned && <span style={{ fontSize:'0.55rem', color:C.muted, opacity:0.5 }}>⋮⋮</span>}
+                              </div>
                             </div>
                             {assigned ? (
                               <div>
                                 <div style={{ fontSize:'0.75rem', fontWeight:700, color:assigned.color, lineHeight:1.2, marginBottom:4 }}>{assigned.emoji} {assigned.name}</div>
                                 <div style={{ fontSize:'0.6rem', color:C.muted }}>${assigned.costWk}/wk · {assigned.driveMins} min</div>
-                                <button onClick={()=>setWeekCamp(planKid,week.wk,null)} style={{
-                                  position:'absolute', top:8, right:8, background:C.bg, border:`1px solid ${C.border}`,
-                                  color:C.muted, borderRadius:6, padding:'2px 7px', fontSize:'0.58rem', cursor:'pointer'
-                                }}>✕</button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setWeekCamp(planKid,week.wk,null) }}
+                                  aria-label={`Remove ${assigned.name} from Week ${week.wk}`}
+                                  style={{ position:'absolute', top:8, right:8, background:C.bg, border:`1px solid ${C.border}`, color:C.muted, borderRadius:6, padding:'2px 7px', fontSize:'0.58rem', cursor:'pointer' }}
+                                >✕</button>
                               </div>
                             ) : (
                               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
@@ -1720,6 +2106,23 @@ export default function BrockFamilyHub() {
                           </div>
                         )
                       })}
+                    </div>
+
+                    {/* Drop-to-remove zone — fades in only while dragging an assigned week */}
+                    <div
+                      data-drop-target="remove"
+                      style={{
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                        padding:'9px 20px', borderRadius:12, marginBottom:16,
+                        border:`2px dashed ${dragState.overTarget === 'remove' ? C.rose : C.rose+'66'}`,
+                        background: dragState.overTarget === 'remove' ? C.roseBg : 'transparent',
+                        color:C.rose, fontSize:'0.72rem', fontWeight:600,
+                        opacity: dragState.isDragging && dragState.sourceType === 'week' ? 1 : 0,
+                        pointerEvents: dragState.isDragging && dragState.sourceType === 'week' ? 'auto' : 'none',
+                        transition:'opacity 0.15s, background 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      🗑️ Drop to remove
                     </div>
 
                     {/* Summary */}
@@ -1753,6 +2156,24 @@ export default function BrockFamilyHub() {
                         <button onClick={()=>{setAiInput('Review my current schedule and optimize it.');setTab('assistant')}} style={{
                           ...s.btn(), marginTop:14, letterSpacing:'0.06em',
                         }}>🤖 Optimize with AI →</button>
+                      </div>
+                    )}
+
+                    {/* Undo toast — fixed bottom-right */}
+                    {undoToast && (
+                      <div style={{
+                        position:'fixed', bottom:24, right:24, zIndex:1000,
+                        background:C.text, color:'#fff',
+                        padding:'12px 16px', borderRadius:12,
+                        display:'flex', alignItems:'center', gap:10,
+                        fontFamily:"'Outfit',sans-serif", fontSize:'0.75rem',
+                        boxShadow:'0 4px 20px rgba(0,0,0,0.18)',
+                      }}>
+                        <span style={{ flex:1 }}>{undoToast.message}</span>
+                        <button onClick={undo} style={{ background:C.sage, border:'none', color:'#fff', borderRadius:7, padding:'5px 12px', fontSize:'0.65rem', fontWeight:700, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                          Undo
+                        </button>
+                        <button onClick={dismissToast} style={{ background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:'1rem', lineHeight:1, padding:0, fontFamily:"'Outfit',sans-serif" }} aria-label="Dismiss">✕</button>
                       </div>
                     )}
                   </div>
