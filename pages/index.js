@@ -634,6 +634,16 @@ export default function BrockFamilyHub() {
   const [mealDay, setMealDay]   = useState('')
   const [mealText, setMealText] = useState('')
 
+  // Collaborative Meal Planner (persisted)
+  const [mealPlan, setMealPlan]             = useState({})   // { 'Mon': { meal, contributor, ts } }
+  const [mealHistory, setMealHistory]       = useState([])   // [{ day, meal, contributor, ts, prev }]
+  const [mealUndoStack, setMealUndoStack]   = useState([])   // [{ day, prev }]
+  const [mealView, setMealView]             = useState('weekly')  // 'weekly' | 'daily'
+  const [mealViewDay, setMealViewDay]       = useState('Mon')
+  const [mealContributor, setMealContributor] = useState('Bakari')
+  const [mealEditModal, setMealEditModal]   = useState(null) // { day, value } | null
+  const [mealEditText, setMealEditText]     = useState('')
+
   // Notes (persisted)
   const [notes, setNotes]       = useState([])
   const [noteText, setNoteText] = useState('')
@@ -684,6 +694,17 @@ export default function BrockFamilyHub() {
       Sat:'Grilled burgers',
       Sun:'Borscht (Tanya\'s recipe) 🇺🇦',
     }))
+    setMealPlan(loadLS('mealPlan', {
+      Mon:{ meal:'Grilled salmon & roasted veggies', contributor:'Jenya', ts:Date.now()-6*86400000 },
+      Tue:{ meal:'Chicken stir-fry with rice',       contributor:'Bakari', ts:Date.now()-5*86400000 },
+      Wed:{ meal:'Taco night 🌮',                    contributor:'Jenya', ts:Date.now()-4*86400000 },
+      Thu:{ meal:'Pasta bolognese',                  contributor:'Bakari', ts:Date.now()-3*86400000 },
+      Fri:{ meal:'Pizza Friday 🍕',                  contributor:'Jenya', ts:Date.now()-2*86400000 },
+      Sat:{ meal:'Grilled burgers',                  contributor:'Bakari', ts:Date.now()-86400000 },
+      Sun:{ meal:"Borscht (Tanya's recipe) 🇺🇦",     contributor:'Jenya', ts:Date.now()-3600000 },
+    }))
+    setMealHistory(loadLS('mealHistory', []))
+    setMealUndoStack(loadLS('mealUndoStack', []))
     setEvents(loadLS('events', [
       { id:1, title:"Monroe T-ball", date:'2026-05-16', time:'09:30', location:'2417 Vista LN field', description:"Don't forget Monroe's cleats! ⚾", color:C.monroe },
       { id:2, title:"Westminster Last Day", date:'2026-05-22', time:'', location:'Westminster School', description:'Last day of school for Monroe', color:C.sky },
@@ -703,6 +724,9 @@ export default function BrockFamilyHub() {
   useEffect(() => { if(mounted) saveLS('tasks', tasks) }, [tasks, mounted])
   useEffect(() => { if(mounted) saveLS('notes', notes) }, [notes, mounted])
   useEffect(() => { if(mounted) saveLS('meals', meals) }, [meals, mounted])
+  useEffect(() => { if(mounted) saveLS('mealPlan', mealPlan) }, [mealPlan, mounted])
+  useEffect(() => { if(mounted) saveLS('mealHistory', mealHistory) }, [mealHistory, mounted])
+  useEffect(() => { if(mounted) saveLS('mealUndoStack', mealUndoStack) }, [mealUndoStack, mounted])
   useEffect(() => { if(mounted) saveLS('events', events) }, [events, mounted])
   useEffect(() => { if(mounted) saveLS('customCamps', customCamps) }, [customCamps, mounted])
 
@@ -947,6 +971,62 @@ export default function BrockFamilyHub() {
     if (!mealDay || !mealText.trim()) return
     setMeals(p => ({ ...p, [mealDay]: mealText.trim() }))
     setMealText(''); setMealDay('')
+  }
+
+  // Collaborative meal planner helpers
+  const DAYS_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const CONTRIBUTORS = ['Bakari','Jenya','Tanya','Grandma','Grandpa']
+  const MAX_MEAL_HISTORY = 50
+  const MAX_UNDO_STACK   = 20
+  const contributorColor = (name) => {
+    const m = FAMILY_MEMBERS.find(fm => fm.name === name)
+    if (m) return m.color
+    if (name === 'Tanya') return C.stone
+    if (name === 'Grandma' || name === 'Grandpa') return C.lavender
+    return C.muted
+  }
+  const fmtMealTs = (ts) => {
+    if (!ts) return ''
+    const diff = Date.now() - ts
+    if (diff < 60000) return 'just now'
+    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`
+    if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`
+    return `${Math.floor(diff/86400000)}d ago`
+  }
+  const saveMealEntry = (day, mealStr) => {
+    if (!mealStr.trim()) return
+    const prev = mealPlan[day] || null
+    const entry = { meal: mealStr.trim(), contributor: mealContributor, ts: Date.now() }
+    setMealPlan(p => ({ ...p, [day]: entry }))
+    setMeals(p => ({ ...p, [day]: mealStr.trim() }))
+    setMealHistory(p => [{ day, ...entry, prev: prev?.meal || null }, ...p].slice(0, MAX_MEAL_HISTORY))
+    setMealUndoStack(p => [...p, { day, prev }].slice(-MAX_UNDO_STACK))
+  }
+  const undoMealChange = () => {
+    if (!mealUndoStack.length) return
+    const last = mealUndoStack[mealUndoStack.length - 1]
+    setMealUndoStack(p => p.slice(0, -1))
+    setMealPlan(p => {
+      const next = { ...p }
+      if (last.prev) next[last.day] = last.prev
+      else delete next[last.day]
+      return next
+    })
+    setMeals(p => {
+      const next = { ...p }
+      if (last.prev) next[last.day] = last.prev.meal
+      else delete next[last.day]
+      return next
+    })
+  }
+  const clearMealDay = (day) => {
+    const prev = mealPlan[day] || null
+    if (!prev) return
+    const entry = { day, meal: '(removed)', contributor: mealContributor, ts: Date.now(), prev: prev.meal }
+    setMealUndoStack(p => [...p, { day, prev }].slice(-MAX_UNDO_STACK))
+    setMealHistory(p => [entry, ...p].slice(0, MAX_MEAL_HISTORY))
+    setMealPlan(p => { const n={...p}; delete n[day]; return n })
+    setMeals(p => { const n={...p}; delete n[day]; return n })
   }
 
   const fmtTime = d => { const h=d.getHours(),m=String(d.getMinutes()).padStart(2,'0'); return `${h%12||12}:${m} ${h>=12?'PM':'AM'}` }
@@ -1307,27 +1387,27 @@ export default function BrockFamilyHub() {
                 {/* Meal Plan */}
                 <div style={s.card()}>
                   <div style={s.sectionLabel}>{ru?'Меню':'Meal Plan'}<div style={s.labelLine}/></div>
-                  {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day => (
-                    <div key={day} style={{
-                      display:'flex', gap:8, padding:'5px 0', fontSize:'0.72rem',
-                      borderBottom:`1px solid ${C.border}`, alignItems:'center'
-                    }}>
-                      <span style={{ width:32, fontWeight:700, color:C.muted, fontSize:'0.6rem', textTransform:'uppercase' }}>{day}</span>
-                      <span style={{ flex:1, color:meals[day]?C.text:C.dim }}>
-                        {meals[day] || '—'}
-                      </span>
-                    </div>
-                  ))}
-                  <div style={{ display:'flex', gap:4, marginTop:10 }}>
-                    <select value={mealDay} onChange={e=>setMealDay(e.target.value)} style={{ ...s.input, width:70, padding:'5px', fontSize:'0.65rem' }}>
-                      <option value="">Day</option>
-                      {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=><option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <input value={mealText} onChange={e=>setMealText(e.target.value)}
-                      onKeyDown={e=>e.key==='Enter'&&setMeal()}
-                      placeholder="Meal…" style={{ ...s.input, flex:1, padding:'5px 8px', fontSize:'0.65rem' }} />
-                    <button onClick={setMeal} style={{ ...s.btn(C.stone), padding:'5px 10px', fontSize:'0.6rem' }}>Set</button>
-                  </div>
+                  {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day => {
+                    const entry = mealPlan[day]
+                    const mColor = entry ? contributorColor(entry.contributor) : C.dim
+                    return (
+                      <div key={day} style={{
+                        display:'flex', gap:8, padding:'5px 0', fontSize:'0.72rem',
+                        borderBottom:`1px solid ${C.border}`, alignItems:'center'
+                      }}>
+                        <span style={{ width:32, fontWeight:700, color:C.muted, fontSize:'0.6rem', textTransform:'uppercase' }}>{day}</span>
+                        <span style={{ flex:1, color:entry?C.text:C.dim }}>
+                          {entry?.meal || '—'}
+                        </span>
+                        {entry && (
+                          <span style={{ width:6, height:6, borderRadius:'50%', background:mColor, flexShrink:0, display:'inline-block' }} title={entry.contributor}/>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <button onClick={()=>{ setTab('planner'); setPlannerTab('meals') }} style={{
+                    ...s.btn(C.stone), width:'100%', marginTop:10, fontSize:'0.6rem', letterSpacing:'0.08em', textTransform:'uppercase'
+                  }}>{ru?'Открыть планировщик меню →':'Open Meal Planner →'}</button>
                 </div>
 
                 {/* Upcoming */}
@@ -1400,6 +1480,7 @@ export default function BrockFamilyHub() {
                 {/* Manage section */}
                 <div style={{ fontSize:'0.5rem', letterSpacing:'0.16em', textTransform:'uppercase', color:C.muted, fontWeight:700, padding:'12px 10px 8px', marginTop:4, borderTop:`1px solid ${C.border}` }}>Manage</div>
                 {[
+                  ['meals','🍽️','Meal Planner'],
                   ['all-events','🗂','All Events'],
                   ['camps','🏕️','Camps Library'],
                   ['scenario','🧠','Scenario Builder'],
@@ -2538,6 +2619,264 @@ export default function BrockFamilyHub() {
                           Undo
                         </button>
                         <button onClick={dismissToast} style={{ background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:'1rem', lineHeight:1, padding:0, fontFamily:"'Outfit',sans-serif" }} aria-label="Dismiss">✕</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── VIEW: MEAL PLANNER ── */}
+                {plannerTab === 'meals' && (
+                  <div>
+                    {/* Header */}
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, gap:12, flexWrap:'wrap' }}>
+                      <div>
+                        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.6rem' }}>
+                          Collaborative <span style={{ color:C.sage }}>Meal Planner</span>
+                        </div>
+                        <div style={{ fontSize:'0.63rem', color:C.muted, marginTop:3 }}>
+                          Shared by the whole family · Add, edit, track changes · Undo available
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                        {/* Contributor selector */}
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontSize:'0.6rem', color:C.muted, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>Editing as</span>
+                          <select
+                            value={mealContributor}
+                            onChange={e => setMealContributor(e.target.value)}
+                            style={{ ...s.input, padding:'5px 10px', fontSize:'0.7rem', cursor:'pointer', borderRadius:8 }}
+                          >
+                            {CONTRIBUTORS.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        {/* View toggle */}
+                        <div style={{ display:'flex', background:C.bg, borderRadius:20, overflow:'hidden', border:`1px solid ${C.border}` }}>
+                          {[['weekly','Week'],['daily','Day']].map(([v,lbl]) => (
+                            <button key={v} onClick={() => setMealView(v)} style={{
+                              padding:'5px 14px', border:'none', cursor:'pointer',
+                              fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', fontWeight:700,
+                              background:mealView===v?C.sage:'transparent',
+                              color:mealView===v?'#fff':C.textSoft,
+                              transition:'all 0.15s',
+                            }}>{lbl}</button>
+                          ))}
+                        </div>
+                        {/* Undo button */}
+                        {mealUndoStack.length > 0 && (
+                          <button onClick={undoMealChange} style={{
+                            display:'flex', alignItems:'center', gap:5,
+                            padding:'6px 12px', borderRadius:9, border:`1px solid ${C.border}`,
+                            background:C.bgWarm, color:C.textSoft,
+                            fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', cursor:'pointer',
+                          }}>
+                            ↩ Undo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 240px', gap:16, alignItems:'start' }}>
+                      {/* Main content */}
+                      <div>
+                        {/* ── WEEKLY VIEW ── */}
+                        {mealView === 'weekly' && (
+                          <div style={{ ...s.card() }}>
+                            <div style={s.sectionLabel}>This Week<div style={s.labelLine}/></div>
+                            {DAYS_ORDER.map(day => {
+                              const entry = mealPlan[day]
+                              const color = entry ? contributorColor(entry.contributor) : C.dim
+                              return (
+                                <div key={day} style={{
+                                  display:'flex', alignItems:'center', gap:10,
+                                  padding:'10px 0', borderBottom:`1px solid ${C.border}`,
+                                }}>
+                                  {/* Day label */}
+                                  <div style={{ width:34, flexShrink:0 }}>
+                                    <div style={{ fontSize:'0.6rem', fontWeight:800, color:C.muted, textTransform:'uppercase', letterSpacing:'0.1em' }}>{day}</div>
+                                  </div>
+                                  {/* Meal text */}
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    {entry ? (
+                                      <>
+                                        <div title={entry.meal} style={{ fontSize:'0.78rem', fontWeight:600, color:C.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{entry.meal}</div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
+                                          <span style={{ width:6, height:6, borderRadius:'50%', background:color, flexShrink:0, display:'inline-block' }}/>
+                                          <span style={{ fontSize:'0.58rem', color:C.muted }}>{entry.contributor} · {fmtMealTs(entry.ts)}</span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <span style={{ fontSize:'0.72rem', color:C.dim, fontStyle:'italic' }}>No meal planned</span>
+                                    )}
+                                  </div>
+                                  {/* Actions */}
+                                  <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                                    <button
+                                      onClick={() => { setMealEditModal({ day, value: entry?.meal || '' }); setMealEditText(entry?.meal || '') }}
+                                      style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', cursor:'pointer' }}
+                                    >{entry ? '✏️ Edit' : '+ Add'}</button>
+                                    {entry && (
+                                      <button
+                                        onClick={() => clearMealDay(day)}
+                                        style={{ padding:'5px 8px', borderRadius:7, border:`1px solid ${C.rose}44`, background:C.roseBg, color:C.rose, fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', cursor:'pointer' }}
+                                        title="Remove meal"
+                                      >✕</button>
+                                    )}
+                                    <button
+                                      onClick={() => { setMealView('daily'); setMealViewDay(day) }}
+                                      style={{ padding:'5px 8px', borderRadius:7, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontFamily:"'Outfit',sans-serif", fontSize:'0.62rem', cursor:'pointer' }}
+                                      title="View day detail"
+                                    >›</button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* ── DAILY VIEW ── */}
+                        {mealView === 'daily' && (
+                          <div>
+                            {/* Day selector */}
+                            <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
+                              {DAYS_ORDER.map(day => (
+                                <button key={day} onClick={() => setMealViewDay(day)} style={{
+                                  padding:'6px 14px', borderRadius:20, border:`1px solid ${mealViewDay===day?C.sage:C.border}`,
+                                  background:mealViewDay===day?C.sage:'transparent',
+                                  color:mealViewDay===day?'#fff':C.textSoft,
+                                  fontFamily:"'Outfit',sans-serif", fontSize:'0.65rem', fontWeight:700, cursor:'pointer',
+                                  transition:'all 0.12s',
+                                }}>{day}</button>
+                              ))}
+                            </div>
+
+                            {/* Day meal card */}
+                            <div style={{ ...s.card({ marginBottom:14 }) }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.3rem' }}>{mealViewDay}</div>
+                                <button
+                                  onClick={() => { setMealEditModal({ day: mealViewDay, value: mealPlan[mealViewDay]?.meal || '' }); setMealEditText(mealPlan[mealViewDay]?.meal || '') }}
+                                  style={{ ...s.btn(C.sage), fontSize:'0.65rem', padding:'7px 14px' }}
+                                >
+                                  {mealPlan[mealViewDay] ? '✏️ Edit Meal' : '+ Set Meal'}
+                                </button>
+                              </div>
+                              {mealPlan[mealViewDay] ? (
+                                <div>
+                                  <div style={{ fontSize:'1rem', fontWeight:700, color:C.text, marginBottom:8 }}>{mealPlan[mealViewDay].meal}</div>
+                                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                    <span style={{ width:8, height:8, borderRadius:'50%', background:contributorColor(mealPlan[mealViewDay].contributor), display:'inline-block' }}/>
+                                    <span style={{ fontSize:'0.65rem', color:C.muted }}>Last edited by <strong style={{ color:C.text }}>{mealPlan[mealViewDay].contributor}</strong> · {fmtMealTs(mealPlan[mealViewDay].ts)}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize:'0.8rem', color:C.dim, fontStyle:'italic' }}>No meal planned for {mealViewDay}</div>
+                              )}
+                            </div>
+
+                            {/* Edit history for this day */}
+                            <div style={{ ...s.card() }}>
+                              <div style={s.sectionLabel}>Edit History — {mealViewDay}<div style={s.labelLine}/></div>
+                              {mealHistory.filter(h => h.day === mealViewDay).length === 0 ? (
+                                <div style={{ fontSize:'0.68rem', color:C.dim, padding:'8px 0' }}>No changes recorded yet.</div>
+                              ) : mealHistory.filter(h => h.day === mealViewDay).map((h, i) => (
+                                <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom:`1px solid ${C.border}` }}>
+                                  <div style={{ width:6, alignSelf:'stretch', borderRadius:3, background:contributorColor(h.contributor), flexShrink:0 }}/>
+                                  <div style={{ flex:1 }}>
+                                    <div style={{ fontSize:'0.72rem', fontWeight:600, color:C.text }}>{h.meal}</div>
+                                    {h.prev && <div style={{ fontSize:'0.6rem', color:C.muted, marginTop:2 }}>Replaced: <span style={{ textDecoration:'line-through' }}>{h.prev}</span></div>}
+                                    <div style={{ fontSize:'0.58rem', color:C.muted, marginTop:2 }}>{h.contributor} · {fmtMealTs(h.ts)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sidebar — recent activity & edit history */}
+                      <div>
+                        <div style={{ ...s.card({ marginBottom:12 }) }}>
+                          <div style={s.sectionLabel}>Contributors<div style={s.labelLine}/></div>
+                          {CONTRIBUTORS.map(c => {
+                            const count = Object.values(mealPlan).filter(e => e?.contributor === c).length
+                            if (!count) return null
+                            return (
+                              <div key={c} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                                <span style={{ width:8, height:8, borderRadius:'50%', background:contributorColor(c), flexShrink:0, display:'inline-block' }}/>
+                                <span style={{ flex:1, fontSize:'0.72rem', fontWeight:600 }}>{c}</span>
+                                <span style={{ fontSize:'0.62rem', color:C.muted }}>{count} meal{count!==1?'s':''}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        <div style={{ ...s.card() }}>
+                          <div style={s.sectionLabel}>Recent Changes<div style={s.labelLine}/></div>
+                          {mealHistory.length === 0 ? (
+                            <div style={{ fontSize:'0.65rem', color:C.dim }}>No changes yet.</div>
+                          ) : mealHistory.slice(0, 8).map((h, i) => (
+                            <div key={i} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:`1px solid ${C.border}` }}>
+                              <span style={{ width:6, height:6, borderRadius:'50%', background:contributorColor(h.contributor), flexShrink:0, marginTop:4, display:'inline-block' }}/>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:'0.65rem', fontWeight:700, color:contributorColor(h.contributor) }}>{h.contributor}</div>
+                                <div title={`${h.day}: ${h.meal}`} style={{ fontSize:'0.63rem', color:C.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{h.day}: {h.meal}</div>
+                                <div style={{ fontSize:'0.57rem', color:C.muted, marginTop:1 }}>{fmtMealTs(h.ts)}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Edit Modal */}
+                    {mealEditModal && (
+                      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <div style={{ ...s.card({ maxWidth:420, width:'100%', margin:16, padding:'24px 28px' }), position:'relative' }}>
+                          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:'1.2rem', marginBottom:4 }}>
+                            {mealEditModal.value ? 'Edit Meal' : 'Set Meal'} — {mealEditModal.day}
+                          </div>
+                          <div style={{ fontSize:'0.65rem', color:C.muted, marginBottom:14 }}>
+                            Setting as <strong>{mealContributor}</strong>
+                          </div>
+                          <textarea
+                            value={mealEditText}
+                            onChange={e => setMealEditText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                saveMealEntry(mealEditModal.day, mealEditText)
+                                setMealEditModal(null)
+                              }
+                              if (e.key === 'Escape') setMealEditModal(null)
+                            }}
+                            placeholder="e.g. Grilled salmon & roasted veggies"
+                            rows={2}
+                            autoFocus
+                            style={{ ...s.input, width:'100%', resize:'vertical', fontSize:'0.82rem', padding:'10px 12px', boxSizing:'border-box', marginBottom:14 }}
+                          />
+                          {/* Contributor selector in modal */}
+                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                            <span style={{ fontSize:'0.6rem', color:C.muted, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>Editing as</span>
+                            <select
+                              value={mealContributor}
+                              onChange={e => setMealContributor(e.target.value)}
+                              style={{ ...s.input, padding:'5px 10px', fontSize:'0.7rem', cursor:'pointer', borderRadius:8, flex:1 }}
+                            >
+                              {CONTRIBUTORS.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div style={{ display:'flex', gap:8 }}>
+                            <button
+                              onClick={() => { saveMealEntry(mealEditModal.day, mealEditText); setMealEditModal(null) }}
+                              disabled={!mealEditText.trim()}
+                              style={{ ...s.btn(C.sage), flex:1, opacity:mealEditText.trim()?1:0.4 }}
+                            >Save Meal</button>
+                            <button
+                              onClick={() => setMealEditModal(null)}
+                              style={{ flex:1, padding:'9px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, color:C.textSoft, fontFamily:"'Outfit',sans-serif", fontSize:'0.7rem', cursor:'pointer' }}
+                            >Cancel</button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
